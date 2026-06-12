@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班級抽籤轉盤</title>
+    <!-- 使用 Tailwind CSS 加速排版與樣式 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 網頁整體字型與背景設定 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 彈出視窗的彈跳動畫 */
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .animate-pop {
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* 按鈕立體效果 */
+        .btn-3d {
+            box-shadow: 0 6px 0 #d97706;
+            transition: all 0.1s;
+        }
+        .btn-3d:active, .btn-3d.active {
+            box-shadow: 0 0px 0 #d97706;
+            transform: translateY(6px);
+        }
+        .btn-3d:disabled {
+            background-color: #9ca3af;
+            box-shadow: 0 6px 0 #6b7280;
+            cursor: not-allowed;
+            transform: none;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center py-10">
+
+    <!-- 標題區域 -->
+    <div class="text-center mb-8">
+        <h1 class="text-4xl md:text-6xl font-extrabold text-white drop-shadow-lg tracking-wider mb-2">
+            幸運抽籤轉盤
+        </h1>
+        <p class="text-white text-lg md:text-xl font-medium drop-shadow-md">
+            班級座號 1 ~ 30 號
+        </p>
+    </div>
+
+    <!-- 轉盤與指標區域 -->
+    <div class="relative flex justify-center items-center mb-10 w-[320px] h-[320px] md:w-[500px] md:h-[500px]">
+        <!-- 指標 (固定於正上方) -->
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 md:-translate-y-6 z-10 drop-shadow-xl">
+            <svg width="40" height="50" viewBox="0 0 40 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 50L0 15C0 15 5 0 20 0C35 0 40 15 40 15L20 50Z" fill="#ef4444"/>
+                <path d="M20 40L6 16C6 16 9 4 20 4C31 4 34 16 34 16L20 40Z" fill="#fca5a5"/>
+            </svg>
+        </div>
+
+        <!-- Canvas 轉盤 (內部解析度放大以保持清晰) -->
+        <canvas id="wheelCanvas" width="1000" height="1000" class="w-full h-full rounded-full shadow-2xl bg-white"></canvas>
+    </div>
+
+    <!-- 抽籤按鈕 -->
+    <button id="spinBtn" class="btn-3d bg-yellow-400 hover:bg-yellow-300 text-yellow-900 font-bold text-2xl md:text-4xl py-4 px-12 rounded-full tracking-widest border-4 border-yellow-500">
+        開始抽籤
+    </button>
+
+    <!-- 結果彈出視窗 (預設隱藏) -->
+    <div id="resultModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm">
+        <div class="bg-white rounded-3xl p-8 md:p-12 text-center shadow-2xl animate-pop border-8 border-yellow-400 max-w-sm w-[90%]">
+            <h2 class="text-3xl font-bold text-gray-700 mb-2">抽中號碼</h2>
+            <div class="text-7xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-br from-pink-500 to-purple-600 my-6 drop-shadow-sm">
+                <span id="resultNumber">--</span>
+            </div>
+            <p class="text-xl text-gray-600 font-semibold mb-8">恭喜這位同學！</p>
+            <button id="closeModalBtn" class="w-full bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xl py-3 rounded-full transition-colors shadow-lg">
+                確定
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 設定資料與變數 ---
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 預設 1 到 30 號
+        const students = Array.from({ length: 30 }, (_, i) => i + 1);
+        const numSlices = students.length;
+        const sliceAngle = (2 * Math.PI) / numSlices;
+        
+        // 活潑豐富的色彩組合 (可被 30 整除循環，避免相鄰同色)
+        const colors = ['#FF595E', '#FFCA3A', '#8AC926', '#1982C4', '#6A4C93', '#FF9F1C'];
+        
+        let currentRotation = 0; // 當前旋轉角度 (弧度)
+        let isSpinning = false;
+
+        // --- 繪製轉盤函數 ---
+        function drawWheel(rotationAngle) {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            // 預留邊距給外框
+            const radius = Math.min(centerX, centerY) - 15;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(rotationAngle);
+
+            // 繪製每一個扇形
+            for (let i = 0; i < numSlices; i++) {
+                // 讓第 0 個扇形的中心對準正上方 (-Math.PI/2)
+                const startAngle = -Math.PI / 2 + i * sliceAngle;
+                const endAngle = startAngle + sliceAngle;
+
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, startAngle, endAngle);
+                ctx.closePath();
+
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.fill();
+
+                // 扇形邊界線
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                // 繪製文字
+                ctx.save();
+                // 將畫布旋轉到該扇形的中心線上
+                ctx.rotate(startAngle + sliceAngle / 2);
+                
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 38px sans-serif'; // 配合大解析度 Canvas
+                
+                // 文字陰影增加可讀性
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+                ctx.shadowBlur = 6;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+
+                // 繪製座號 (靠近轉盤外側)
+                ctx.fillText(students[i], radius - 30, 0);
+                ctx.restore();
+            }
+
+            // 繪製轉盤中心的圓形裝飾 (Hub)
+            ctx.beginPath();
+            ctx.arc(0, 0, 50, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, 2 * Math.PI);
+            ctx.fillStyle = '#d1d5db';
+            ctx.fill();
+
+            // 繪製最外層的裝飾環
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+            ctx.lineWidth = 15;
+            ctx.strokeStyle = '#fbbf24';
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // 初始化繪製
+        drawWheel(currentRotation);
+
+        // --- 旋轉動畫與邏輯 ---
+        // 緩動函數：Quart Ease Out (使減速看起來自然)
+        function easeOutQuart(t) {
+            return 1 - Math.pow(1 - t, 4);
+        }
+
+        function startSpin() {
+            if (isSpinning) return;
+            isSpinning = true;
+
+            const btn = document.getElementById('spinBtn');
+            btn.disabled = true;
+
+            const startRotation = currentRotation;
+            // 隨機旋轉圈數：基本 6~10 圈 + 額外的隨機角度
+            const randomExtraRotation = Math.random() * 2 * Math.PI;
+            const spinRotations = (Math.floor(Math.random() * 5) + 6) * 2 * Math.PI + randomExtraRotation;
+            const targetRotation = startRotation + spinRotations;
+            
+            const duration = 6000; // 動畫持續時間：6秒
+            let startTime = null;
+
+            function animate(time) {
+                if (!startTime) startTime = time;
+                const elapsed = time - startTime;
+                let progress = elapsed / duration;
+
+                if (progress >= 1) {
+                    progress = 1;
+                }
+
+                const ease = easeOutQuart(progress);
+                currentRotation = startRotation + (targetRotation - startRotation) * ease;
+                
+                drawWheel(currentRotation);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    isSpinning = false;
+                    btn.disabled = false;
+                    showResult();
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- 計算並顯示結果 ---
+        function showResult() {
+            // 計算當前對準正上方的號碼
+            // 將旋轉角度限制在 0 ~ 2*PI 之間
+            let posMod = (-currentRotation % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+            
+            // 根據角度計算索引
+            let winnerIndex = Math.floor(posMod / sliceAngle);
+            const winnerNumber = students[winnerIndex];
+
+            // 更新並顯示彈出視窗
+            document.getElementById('resultNumber').textContent = winnerNumber;
+            const modal = document.getElementById('resultModal');
+            modal.classList.remove('hidden');
+        }
+
+        // --- 事件綁定 ---
+        document.getElementById('spinBtn').addEventListener('click', startSpin);
+        
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            const modal = document.getElementById('resultModal');
+            modal.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
