@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班級重要資訊佈告欄</title>
+    
+    <!-- 引入 Tailwind CSS 進行快速排版 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 FontAwesome 圖示 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- 引入 Google Fonts (Noto Sans TC) 提升中文閱讀體驗 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- 設定 Tailwind 自定義主題 (溫暖大地色與粉彩系) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', 'sans-serif'],
+                    },
+                    colors: {
+                        earth: {
+                            50: '#fdf8f5',
+                            100: '#f8ece5',
+                            200: '#eed6c8',
+                            300: '#e1b7a2',
+                            400: '#d09174',
+                            500: '#c37351', // 主色調：溫暖陶土紅
+                            600: '#b75b3b',
+                            700: '#99472f',
+                        },
+                        sage: {
+                            50: '#f4f7f4',
+                            100: '#eef2ee',
+                            500: '#8eb08e', // 點綴色：柔和鼠尾草綠
+                            700: '#5c7a5c',
+                        },
+                        pastel: {
+                            blue: '#e0f2fe',
+                            yellow: '#fef3c7',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { 
+            background-color: #fcfaf8; 
+            background-image: radial-gradient(#eed6c8 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+        
+        /* 毛玻璃卡片質感 */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+        }
+        
+        /* 簡單的進場動畫 */
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease-out forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        
+        @keyframes fadeInUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="text-stone-800 antialiased min-h-screen pb-12 selection:bg-earth-200">
+
+    <!-- 頂部區塊 (Header) -->
+    <header class="bg-earth-500 text-white pt-12 pb-16 px-4 rounded-b-[2.5rem] shadow-md fade-in-up">
+        <div class="max-w-2xl mx-auto text-center">
+            <h1 class="text-3xl md:text-4xl font-bold mb-3 tracking-wide">
+                <i class="fa-solid fa-seedling mr-3 text-earth-200"></i>三年甲班 資訊佈告欄
+            </h1>
+            <p class="text-earth-50 text-lg opacity-90">歡迎來到我們的溫馨小天地</p>
+            <div class="mt-5 inline-flex items-center bg-white/20 backdrop-blur-sm rounded-full px-4 py-1.5 text-sm font-medium border border-white/30">
+                <i class="fa-regular fa-calendar text-earth-100 mr-2"></i>
+                <span id="current-date"></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="max-w-2xl mx-auto px-4 -mt-8 space-y-6">
+
+        <!-- (a) 導師的話 -->
+        <section class="glass-card rounded-2xl p-6 md:p-8 fade-in-up delay-1 border-t-4 border-sage-500 relative overflow-hidden">
+            <!-- 背景裝飾 -->
+            <i class="fa-solid fa-quote-right absolute -bottom-4 -right-4 text-9xl text-sage-50 opacity-50 pointer-events-none"></i>
+            
+            <div class="flex items-center mb-4 relative z-10">
+                <div class="w-10 h-10 rounded-full bg-sage-100 text-sage-700 flex items-center justify-center text-xl mr-3 shadow-inner">
+                    <i class="fa-solid fa-chalkboard-user"></i>
+                </div>
+                <h2 class="text-xl font-bold text-stone-800 tracking-wide">導師的話</h2>
+            </div>
+            
+            <div class="bg-sage-50/50 rounded-xl p-5 relative z-10">
+                <p class="text-stone-600 leading-relaxed text-justify md:text-lg">
+                    各位家長、同學好：<br><br>
+                    新的一個月開始了！感謝大家在上週校慶活動中的熱情參與，孩子們的表現都非常棒。最近天氣變化大，早晚偏涼，請提醒孩子們多帶一件薄外套來學校放在置物櫃備用。<br><br>
+                    學習的路上我們一起努力，如果有任何問題，隨時歡迎透過聯絡簿或官方 Line 群組與我聯繫哦！
+                </p>
+                <div class="text-right mt-4 text-sm font-bold text-sage-700">
+                    — 林導師 敬上 📝
+                </div>
+            </div>
+        </section>
+
+        <!-- (b) 本週重要事項 -->
+        <section class="glass-card rounded-2xl p-6 md:p-8 fade-in-up delay-2 border-t-4 border-earth-400">
+            <div class="flex items-center mb-5">
+                <div class="w-10 h-10 rounded-full bg-earth-100 text-earth-600 flex items-center justify-center text-xl mr-3 shadow-inner">
+                    <i class="fa-solid fa-thumbtack"></i>
+                </div>
+                <h2 class="text-xl font-bold text-stone-800 tracking-wide">本週重要事項</h2>
+            </div>
+            
+            <ul class="space-y-3">
+                <!-- 事項 1 -->
+                <li class="flex items-start bg-white border border-stone-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                    <div class="mt-0.5 mr-3 text-earth-500 text-lg"><i class="fa-regular fa-square-check"></i></div>
+                    <div>
+                        <div class="font-bold text-stone-800 mb-0.5"><span class="text-earth-600 mr-2">週二 (6/16)</span> 戶外教學回條</div>
+                        <div class="text-stone-500 text-sm">請務必繳交家長同意書回條與活動費用。</div>
+                    </div>
+                </li>
+                <!-- 事項 2 -->
+                <li class="flex items-start bg-white border border-stone-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                    <div class="mt-0.5 mr-3 text-earth-500 text-lg"><i class="fa-regular fa-square-check"></i></div>
+                    <div>
+                        <div class="font-bold text-stone-800 mb-0.5"><span class="text-earth-600 mr-2">週三 (6/17)</span> 自然科平時測驗</div>
+                        <div class="text-stone-500 text-sm">範圍：課本第三單元（植物的生長）。請提醒孩子提早複習。</div>
+                    </div>
+                </li>
+                <!-- 事項 3 -->
+                <li class="flex items-start bg-white border border-stone-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                    <div class="mt-0.5 mr-3 text-earth-500 text-lg"><i class="fa-regular fa-square-check"></i></div>
+                    <div>
+                        <div class="font-bold text-stone-800 mb-0.5"><span class="text-earth-600 mr-2">週五 (6/19)</span> 全校期末大掃除</div>
+                        <div class="text-stone-500 text-sm">請孩子準備一條乾淨的抹布帶至學校。</div>
+                    </div>
+                </li>
+            </ul>
+        </section>
+
+        <!-- (c) 學校重要連結 -->
+        <section class="glass-card rounded-2xl p-6 md:p-8 fade-in-up delay-3">
+            <div class="flex items-center mb-5">
+                <div class="w-10 h-10 rounded-full bg-pastel-blue text-sky-600 flex items-center justify-center text-xl mr-3 shadow-inner">
+                    <i class="fa-solid fa-link"></i>
+                </div>
+                <h2 class="text-xl font-bold text-stone-800 tracking-wide">學校重要連結</h2>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- 連結 1 -->
+                <a href="#" class="group flex items-center p-4 bg-stone-50 rounded-xl hover:bg-earth-50 transition-colors border border-stone-200 hover:border-earth-300">
+                    <div class="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-earth-500 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-school"></i>
+                    </div>
+                    <div class="ml-3">
+                        <div class="font-bold text-stone-800 group-hover:text-earth-600 transition-colors">學校官方網站</div>
+                        <div class="text-xs text-stone-500 mt-0.5">查看校園最新公告</div>
+                    </div>
+                </a>
+                <!-- 連結 2 -->
+                <a href="#" class="group flex items-center p-4 bg-stone-50 rounded-xl hover:bg-earth-50 transition-colors border border-stone-200 hover:border-earth-300">
+                    <div class="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-sage-600 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-utensils"></i>
+                    </div>
+                    <div class="ml-3">
+                        <div class="font-bold text-stone-800 group-hover:text-sage-700 transition-colors">營養午餐菜單</div>
+                        <div class="text-xs text-stone-500 mt-0.5">下載當月菜單與食材登錄</div>
+                    </div>
+                </a>
+                <!-- 連結 3 -->
+                <a href="#" class="group flex items-center p-4 bg-stone-50 rounded-xl hover:bg-earth-50 transition-colors border border-stone-200 hover:border-earth-300">
+                    <div class="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-book-open"></i>
+                    </div>
+                    <div class="ml-3">
+                        <div class="font-bold text-stone-800 group-hover:text-amber-600 transition-colors">圖書館查詢系統</div>
+                        <div class="text-xs text-stone-500 mt-0.5">線上查詢與預約借書</div>
+                    </div>
+                </a>
+                <!-- 連結 4 -->
+                <a href="#" class="group flex items-center p-4 bg-stone-50 rounded-xl hover:bg-earth-50 transition-colors border border-stone-200 hover:border-earth-300">
+                    <div class="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-sky-500 group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-laptop-file"></i>
+                    </div>
+                    <div class="ml-3">
+                        <div class="font-bold text-stone-800 group-hover:text-sky-600 transition-colors">學生線上學習網</div>
+                        <div class="text-xs text-stone-500 mt-0.5">課後作業與數位補充教材</div>
+                    </div>
+                </a>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 頁尾 -->
+    <footer class="mt-12 text-center text-stone-400 text-sm fade-in-up delay-3 pb-8">
+        <p>Made with <i class="fa-solid fa-heart text-earth-300 mx-1"></i> 班級專屬小天地</p>
+    </footer>
+
+    <!-- 腳本區塊 -->
+    <script>
+        // 自動取得並顯示今天的日期
+        const dateOptions = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' };
+        const today = new Date();
+        document.getElementById('current-date').textContent = today.toLocaleDateString('zh-TW', dateOptions);
+
+        // 提示：您可以輕鬆地在此處新增按鈕點擊事件，例如複製連結等互動功能。
+    </script>
+</body>
+</html>
