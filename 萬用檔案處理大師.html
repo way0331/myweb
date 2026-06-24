@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>萬用檔案處理大師 - 旗艦版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <!-- 新增 ImageTracer.js 向量化轉換引擎 -->
+    <script src="https://cdn.jsdelivr.net/npm/imagetracerjs/imagetracer_v1.2.6.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; scroll-behavior: smooth; }
+        .tab-active { background-color: #3b82f6; color: white; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); }
+        .drag-over { border-color: #3b82f6; background-color: #eff6ff; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .pdf-page-card.selected { border-color: #3b82f6; background-color: #eff6ff; ring: 2px; ring-color: #3b82f6; }
+        .pdf-page-card.selected .check-badge { display: flex; }
+
+        /* 棋盤透明背景網格樣式 */
+        .transparent-grid {
+            background-image: linear-gradient(45deg, #e2e8f0 25%, transparent 25%), 
+                              linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #e2e8f0 75%), 
+                              linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 pb-12">
+
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-black text-slate-900 mb-3 tracking-tight">萬用檔案處理大師</h1>
+            <p class="text-slate-500 font-medium">視覺化 PDF 編輯與超高畫質處理解決方案、純前端隱私安全防護</p>
+        </header>
+
+        <!-- 功能分頁導覽 -->
+        <div class="flex items-center justify-center mb-8">
+            <div class="tabs-container flex space-x-2 overflow-x-auto p-1 bg-white rounded-2xl shadow-sm border border-slate-200 no-scrollbar">
+                <button onclick="switchTab('imgToPdf')" id="tab-imgToPdf" class="tab-btn whitespace-nowrap px-5 py-2.5 text-sm rounded-xl transition-all tab-active font-bold">圖片 ➔ PDF</button>
+                <button onclick="switchTab('imgToSvg')" id="tab-imgToSvg" class="tab-btn whitespace-nowrap px-5 py-2.5 text-sm rounded-xl transition-all text-slate-500 hover:bg-slate-100 font-bold">圖片 ➔ SVG 向量(提高畫質但可能失真) ✨</button>
+                <button onclick="switchTab('pdfToImg')" id="tab-pdfToImg" class="tab-btn whitespace-nowrap px-5 py-2.5 text-sm rounded-xl transition-all text-slate-500 hover:bg-slate-100 font-bold">PDF ➔ 圖片</button>
+                <button onclick="switchTab('pdfMerge')" id="tab-pdfMerge" class="tab-btn whitespace-nowrap px-5 py-2.5 text-sm rounded-xl transition-all text-slate-500 hover:bg-slate-100 font-bold">PDF 合併與排序</button>
+                <button onclick="switchTab('pdfSplit')" id="tab-pdfSplit" class="tab-btn whitespace-nowrap px-5 py-2.5 text-sm rounded-xl transition-all text-slate-500 hover:bg-slate-100 font-bold">PDF 視覺分割</button>
+                <button onclick="switchTab('imgConvert')" id="tab-imgConvert" class="tab-btn whitespace-nowrap px-5 py-2.5 text-sm rounded-xl transition-all text-slate-500 hover:bg-slate-100 font-bold">圖片格式轉換</button>
+            </div>
+        </div>
+
+        <!-- 1. 圖片轉 PDF -->
+        <section id="panel-imgToPdf" class="tab-panel space-y-6">
+            <div id="dropZoneImg" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-16 text-center cursor-pointer hover:border-blue-400 transition-all">
+                <input type="file" id="inputImg" multiple accept="image/*,image/svg+xml,.svg" class="hidden">
+                <p class="text-xl font-bold text-slate-700">拖放圖片或 SVG 到這裡</p>
+                <p class="text-slate-400 mt-2">支援批次處理，可手動排序（已完美支援 SVG 格式直接轉換）</p>
+            </div>
+            
+            <div id="controlImg" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-6">
+                <div class="flex flex-wrap gap-6 items-center">
+                    <!-- 版面選擇 -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs font-bold text-slate-400 uppercase">版面大小</label>
+                        <select id="imgPageSize" onchange="toggleFitModeSelector()" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="a4-portrait">標準 A4 (直式 - 210x297mm)</option>
+                            <option value="a4-landscape">標準 A4 (橫式 - 297x210mm)</option>
+                            <option value="a3-portrait">標準 A3 (直式 - 297x420mm)</option>
+                            <option value="a3-landscape">標準 A3 (橫式 - 420x297mm)</option>
+                            <option value="a2-portrait">標準 A2 (直式 - 420x594mm)</option>
+                            <option value="a2-landscape">標準 A2 (橫式 - 594x420mm)</option>
+                            <option value="a1-portrait">標準 A1 (直式 - 594x841mm)</option>
+                            <option value="a1-landscape">標準 A1 (橫式 - 841x594mm)</option>
+                            <option value="original">依原始圖片大小 (自動貼邊)</option>
+                            <option value="custom">自定義規格 (mm)</option>
+                        </select>
+                    </div>
+
+                    <!-- 自定義規格輸入框 (預設隱藏) -->
+                    <div id="customSizeWrapper" class="hidden flex gap-3 animate-in fade-in slide-in-from-left-2 duration-200">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs font-bold text-slate-400 uppercase">自定義寬 (mm)</label>
+                            <input type="number" id="imgCustomWidth" value="210" min="1" class="w-24 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs font-bold text-slate-400 uppercase">自定義高 (mm)</label>
+                            <input type="number" id="imgCustomHeight" value="297" min="1" class="w-24 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    
+                    <!-- 填滿模式 -->
+                    <div id="fitModeWrapper" class="flex flex-col gap-1">
+                        <label class="text-xs font-bold text-slate-400 uppercase">縮放模式</label>
+                        <select id="imgFitMode" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="fit-width">等比例寬度貼邊 (左右滿版，上下留白)</option>
+                            <option value="contain">等比例整體適應 (寬高皆不超出，四周留白)</option>
+                            <option value="cover">保持比例裁切並填滿 (Cover - 滿版無留白)</option>
+                            <option value="stretch">拉伸填滿整頁 (Stretch - 畫面會變形)</option>
+                        </select>
+                    </div>
+
+                    <!-- 邊距設定 -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs font-bold text-slate-400 uppercase">頁面邊距 (mm)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="imgMargin" value="0" min="0" class="w-16 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button onclick="document.getElementById('imgMargin').value = '0'" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">
+                                貼邊 (0mm)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3 items-center">
+                    <button onclick="clearImgList()" class="text-sm font-bold text-slate-400 hover:text-red-500 transition-colors px-2">清除全部</button>
+                    <button onclick="generatePdfFromImg()" id="btnGenImg" class="px-8 py-3 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95">產生 PDF</button>
+                </div>
+            </div>
+            <div id="imgList" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+        </section>
+
+        <!-- 2. 圖片 ➔ SVG 向量化(提高畫質用) ✨ -->
+        <section id="panel-imgToSvg" class="tab-panel hidden space-y-6">
+            <div id="dropZoneSvg" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-16 text-center cursor-pointer hover:border-blue-500 transition-all">
+                <input type="file" id="inputSvg" accept="image/*" class="hidden">
+                <p class="text-xl font-bold text-slate-700">選擇或拖放圖片到這裡</p>
+                <p class="text-slate-400 mt-2">支援 JPG/PNG 一鍵快速轉換為無限放大不失真的標準 SVG 向量檔</p>
+            </div>
+
+            <div id="svgControlArea" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-300">
+                <!-- 左側：原始與向量預覽區 -->
+                <div class="lg:col-span-7 flex flex-col justify-center bg-slate-100 rounded-3xl p-4 border border-slate-200 shadow-inner">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- 原始點陣圖 -->
+                        <div class="flex flex-col bg-white rounded-2xl p-3 border border-slate-200">
+                            <div class="flex justify-between items-center mb-2 px-1">
+                                <span class="text-xs font-bold text-slate-500">原始點陣圖 (Bitmap)</span>
+                                <span id="svgOrigSizeLabel" class="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">0x0 px</span>
+                            </div>
+                            <div class="w-full aspect-square bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden border">
+                                <img id="svgSourcePreviewImg" class="max-w-full max-h-full object-contain" src="" alt="原始輸入圖">
+                            </div>
+                        </div>
+
+                        <!-- 轉換後 SVG 向量圖 -->
+                        <div class="flex flex-col bg-white rounded-2xl p-3 border border-slate-200">
+                            <div class="flex justify-between items-center mb-2 px-1">
+                                <span class="text-xs font-bold text-blue-600">向量化 SVG (Vector)</span>
+                                <span class="text-[10px] font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">無限解析度</span>
+                            </div>
+                            <!-- 設有背景棋盤網格，方便確認透明/去背效果 -->
+                            <div id="svgPreviewContainer" class="transparent-grid w-full aspect-square rounded-xl flex items-center justify-center overflow-hidden border transition-colors duration-200">
+                                <!-- 向量 SVG 將會被插入到這裡 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 快速預覽背景切換 -->
+                    <div class="flex justify-center items-center gap-3 mt-4 text-xs font-medium text-slate-500">
+                        <span>預覽底色：</span>
+                        <button onclick="setSvgBg('transparent')" class="px-2.5 py-1 bg-white border rounded-lg hover:bg-slate-50 transition-colors font-bold shadow-xs">🏁 透明網格</button>
+                        <button onclick="setSvgBg('white')" class="px-2.5 py-1 bg-white border rounded-lg hover:bg-slate-50 transition-colors font-bold shadow-xs">⚪ 純白底</button>
+                        <button onclick="setSvgBg('black')" class="px-2.5 py-1 bg-white border rounded-lg hover:bg-slate-50 transition-colors font-bold shadow-xs">⚫ 純黑底</button>
+                    </div>
+                </div>
+
+                <!-- 右側：強大向量化參數面板 -->
+                <div class="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-6">
+                    <div>
+                        <h3 class="text-lg font-black text-slate-900 mb-1">向量化參數調整</h3>
+                        <p class="text-xs text-slate-400">控制色彩細緻度與像素邊緣擬合品質</p>
+                    </div>
+
+                    <hr class="border-slate-100">
+
+                    <!-- 預設模式 -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-black text-slate-500 uppercase tracking-wider block">向量化預設引擎</label>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <button onclick="applySvgPreset('mono')" id="btnSvgPreset-mono" class="svg-preset-btn px-4 py-2.5 bg-slate-50 hover:bg-blue-50 border rounded-xl text-xs font-bold text-slate-700 transition-all text-center">
+                                🖋️ 單色簽名/線稿
+                            </button>
+                            <button onclick="applySvgPreset('low')" id="btnSvgPreset-low" class="svg-preset-btn px-4 py-2.5 bg-slate-50 hover:bg-blue-50 border rounded-xl text-xs font-bold text-slate-700 transition-all text-center">
+                                🎨 簡約插畫 (8 色)
+                            </button>
+                            <button onclick="applySvgPreset('mid')" id="btnSvgPreset-mid" class="svg-preset-btn px-4 py-2.5 bg-slate-50 hover:bg-blue-50 border rounded-xl text-xs font-bold text-slate-700 transition-all text-center">
+                                🖼️ 標準中彩 (16 色)
+                            </button>
+                            <button onclick="applySvgPreset('high')" id="btnSvgPreset-high" class="svg-preset-btn px-4 py-2.5 bg-slate-50 hover:bg-blue-50 border rounded-xl text-xs font-bold text-slate-700 transition-all text-center animate-pulse border-blue-300">
+                                📸 高清相片/人像 (48 色)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4 pt-2">
+                        <!-- AI海報/文字預處理優化開關 -->
+                        <div class="flex justify-between items-center bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100">
+                            <div>
+                                <span class="text-xs font-black text-blue-950 flex items-center gap-1">
+                                    AI海報 / 清晰文字優化
+                                    <span class="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-bold">推薦</span>
+                                </span>
+                                <span class="text-[10px] text-blue-700 block mt-0.5">自動銳化邊緣並提高對比度，大幅防止文字與細節失真</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="svgPreprocess" onchange="updateSvgSlidersAndReprocess()" class="sr-only peer" checked>
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+
+                        <!-- 處理尺寸限制 (極致大圖運算用) -->
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-xs font-black text-slate-500 uppercase tracking-wider">處理解析度限制</label>
+                            <select id="svgMaxResolution" onchange="updateSvgSlidersAndReprocess()" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="750">快速預覽 (750px)</option>
+                                <option value="1200" selected>高畫質 (1200px)</option>
+                                <option value="2000">超高清 (2000px)</option>
+                                <option value="original">原始尺寸 (無壓縮，最精緻，運算較慢)</option>
+                            </select>
+                        </div>
+
+                        <!-- 色彩數量 -->
+                        <div id="svgColorSliderWrapper" class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold text-slate-600">
+                                <span>色彩採樣上限 (Max Colors)</span>
+                                <span id="valSvgColors" class="text-blue-600 font-mono">16 色</span>
+                            </div>
+                            <input type="range" id="svgColors" min="2" max="128" value="16" oninput="updateSvgSlidersAndReprocess()" class="w-full accent-blue-600 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- 核心色彩校對迭代次數 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold text-slate-600">
+                                <span>色彩迭代保真度 (Color Fidelity)</span>
+                                <span id="valSvgQuantCycles" class="text-blue-600 font-mono">10 次</span>
+                            </div>
+                            <input type="range" id="svgQuantCycles" min="1" max="25" value="10" oninput="updateSvgSlidersAndReprocess()" class="w-full accent-blue-600 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- 邊緣精確度 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold text-slate-600">
+                                <span>細節精確度 (Detail)</span>
+                                <span id="valSvgDetail" class="text-blue-600">中等平衡</span>
+                            </div>
+                            <input type="range" id="svgDetail" min="1" max="5" value="3" oninput="updateSvgSlidersAndReprocess()" class="w-full accent-blue-600 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- 路徑曲線平滑度 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold text-slate-600">
+                                <span>路徑曲線平滑度 (Smoothing)</span>
+                                <span id="valSvgSmoothing" class="text-blue-600 font-mono">0.35</span>
+                            </div>
+                            <input type="range" id="svgSmoothing" min="0.01" max="2.0" step="0.01" value="0.35" oninput="updateSvgSlidersAndReprocess()" class="w-full accent-blue-600 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- 向量柔和漸層 (相片與人像柔化防失真) -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold text-slate-600">
+                                <span>向量柔和漸層 (SVG Smooth Blend)</span>
+                                <span id="valSvgBlur" class="text-blue-600">0.0px</span>
+                            </div>
+                            <input type="range" id="svgBlur" min="0" max="10" step="0.1" value="0" oninput="updateSvgSlidersAndReprocess()" class="w-full accent-blue-600 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- 匯出高清點陣圖選單 (New!) -->
+                    <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-3">
+                        <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">匯出高清點陣圖片 (PNG / JPG)</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-slate-400">匯出格式</label>
+                                <select id="svgExportFormat" class="bg-white border border-slate-200 px-2 py-1.5 rounded-lg text-xs font-bold focus:ring-2 focus:ring-blue-500">
+                                    <option value="image/png">PNG (保留透明背景)</option>
+                                    <option value="image/jpeg">JPG (純白背景底色)</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-slate-400">向量放大倍率</label>
+                                <select id="svgExportScale" class="bg-white border border-slate-200 px-2 py-1.5 rounded-lg text-xs font-bold focus:ring-2 focus:ring-blue-500">
+                                    <option value="1">1x (原始尺寸)</option>
+                                    <option value="2" selected>2x (高清晰度)</option>
+                                    <option value="4">4x (超高畫質海報)</option>
+                                    <option value="8">8x (極致大型印刷)</option>
+                                    <option value="10">10x (巨幅巨報規格)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="exportSvgToBitmap()" id="btnExportBitmap" class="w-full py-2.5 bg-slate-800 hover:bg-black text-white font-bold rounded-xl text-xs transition-colors shadow-md flex items-center justify-center gap-1.5">
+                            🖼️ 匯出點陣圖片 (根據選定倍率)
+                        </button>
+                    </div>
+
+                    <!-- 操作按鈕 -->
+                    <div class="pt-2 flex flex-col gap-2.5">
+                        <div class="flex gap-3">
+                            <button onclick="clearSvgImg()" class="w-1/3 py-3 border border-slate-200 text-slate-400 font-bold rounded-xl hover:bg-slate-50 transition-colors text-sm">重新選擇</button>
+                            <button onclick="downloadSvgFile()" id="btnSaveSvg" class="w-2/3 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-xl shadow-blue-100 transition-all active:scale-95 text-sm flex items-center justify-center gap-1.5">
+                                📥 下載 SVG 向量檔
+                            </button>
+                        </div>
+                        <button onclick="copySvgCodeToClipboard()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors border border-slate-200">
+                            📋 複製 SVG 代碼 (供設計/網頁貼入)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. PDF ➔ 圖片 -->
+        <section id="panel-pdfToImg" class="tab-panel hidden space-y-6">
+            <div id="dropZonePdf" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-16 text-center cursor-pointer hover:border-red-400">
+                <input type="file" id="inputPdf" accept="application/pdf" class="hidden">
+                <p class="text-xl font-bold text-slate-700">選擇 PDF 檔案</p>
+            </div>
+            <div id="pdfToImgActionArea" class="hidden text-center">
+                <div id="pdfToImgInfo" class="mb-4 font-bold text-slate-600"></div>
+                <button onclick="convertPdfToImages()" id="btnGenPdfImgs" class="px-10 py-3 bg-red-500 text-white rounded-xl font-black shadow-lg">下載所有頁面 (ZIP)</button>
+                <div id="pdfToImgPreviewGrid" class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8"></div>
+            </div>
+        </section>
+
+        <!-- 4. PDF 合併與排序 -->
+        <section id="panel-pdfMerge" class="tab-panel hidden space-y-6">
+            <div id="dropZoneMerge" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-16 text-center cursor-pointer hover:border-green-400">
+                <input type="file" id="inputMerge" multiple accept="application/pdf" class="hidden">
+                <p class="text-xl font-bold text-slate-700">拖放 PDF 檔案來合併與排序</p>
+                <p class="text-slate-400 mt-2">系統將拆分每一頁，您可以自由拖拽縮圖排列順序</p>
+            </div>
+            <div id="mergeControl" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                <span id="mergeCount" class="font-bold text-slate-600">已載入 0 個頁面</span>
+                <div class="flex gap-3">
+                    <button onclick="clearMergeList()" class="px-4 py-2 text-slate-400 hover:text-red-500 font-bold transition-colors">清除全部</button>
+                    <button onclick="processPdfMerge()" class="px-8 py-2.5 bg-green-600 text-white rounded-xl font-black hover:bg-green-700 shadow-lg">合併並下載 PDF</button>
+                </div>
+            </div>
+            <div id="mergePageList" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+        </section>
+
+        <!-- 5. PDF 視覺分割 -->
+        <section id="panel-pdfSplit" class="tab-panel hidden space-y-6">
+            <div id="dropZoneSplit" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-16 text-center cursor-pointer hover:border-orange-400">
+                <input type="file" id="inputSplit" accept="application/pdf" class="hidden">
+                <p class="text-xl font-bold text-slate-700">選擇要分割的 PDF</p>
+                <p class="text-slate-400 mt-2">點選頁面縮圖來選取要提取的範圍</p>
+            </div>
+            <div id="splitControl" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                <div class="flex justify-between items-center">
+                    <span id="splitFileInfo" class="font-bold text-slate-600"></span>
+                    <div class="flex gap-4">
+                        <button onclick="selectAllSplit(true)" class="text-sm text-blue-600 font-bold">全選</button>
+                        <button onclick="selectAllSplit(false)" class="text-sm text-slate-400 font-bold">取消全選</button>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-4 items-center justify-end">
+                    <button onclick="processPdfSplit(true)" class="px-6 py-2.5 bg-slate-800 text-white rounded-xl font-black hover:bg-black shadow-lg">將選中頁面合併為一檔</button>
+                    <button onclick="processPdfSplit(false)" class="px-6 py-2.5 bg-orange-500 text-white rounded-xl font-black hover:bg-orange-600 shadow-lg">將選中頁面分別存檔 (ZIP)</button>
+                </div>
+            </div>
+            <div id="splitPageList" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+        </section>
+
+        <!-- 6. 圖片格式轉換 -->
+        <section id="panel-imgConvert" class="tab-panel hidden space-y-6">
+            <div id="dropZoneConv" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-16 text-center cursor-pointer hover:border-pink-400">
+                <input type="file" id="inputConv" multiple accept="image/*" class="hidden">
+                <p class="text-xl font-bold text-slate-700">選擇要轉換格式的圖片</p>
+            </div>
+            <div id="convControl" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-bold text-slate-500">轉換為：</span>
+                    <select id="targetFormat" class="border p-2 rounded-lg font-bold">
+                        <option value="image/jpeg">JPG</option>
+                        <option value="image/png">PNG</option>
+                        <option value="image/webp">WebP</option>
+                    </select>
+                </div>
+                <button onclick="processImageConversion()" class="px-8 py-2.5 bg-pink-500 text-white rounded-xl font-black hover:bg-pink-600 shadow-lg">轉換並打包 ZIP</button>
+            </div>
+            <div id="convList" class="grid grid-cols-3 md:grid-cols-6 gap-4"></div>
+        </section>
+
+        <div id="statusToast" class="fixed bottom-8 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl shadow-2xl opacity-0 transition-all duration-300 pointer-events-none z-50 text-white font-bold text-center min-w-[200px]"></div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        let activeImages = [];
+        let mergePages = []; // 儲存 { id, pdfBytes, pageIndex, dataUrl }
+        let convFiles = [];
+        let currentPdfToImgFile = null;
+        let splitSourceBytes = null;
+        let splitPageData = []; // 儲存 { index, selected, dataUrl }
+
+        // SVG 向量化專用全域變數
+        let svgSourceImg = null;
+        let svgFileName = "";
+        let svgOutputString = "";
+        let svgReprocessTimeout = null;
+
+        window.onload = function() {
+            setupDropZones();
+            initSortable();
+        };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.add('text-slate-500'));
+            const activeTab = document.getElementById('tab-' + tabId);
+            activeTab.classList.add('tab-active');
+            activeTab.classList.remove('text-slate-500');
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+            document.getElementById('panel-' + tabId).classList.remove('hidden');
+        }
+
+        function showToast(msg, type = 'info') {
+            const toast = document.getElementById('statusToast');
+            const bg = type === 'error' ? 'bg-red-600' : (type === 'success' ? 'bg-green-600' : 'bg-slate-900');
+            toast.innerText = msg;
+            toast.className = `fixed bottom-8 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl shadow-2xl text-white z-50 transition-all duration-300 opacity-100 ${bg}`;
+            setTimeout(() => toast.style.opacity = '0', 3000);
+        }
+
+        function initSortable() {
+            const imgList = document.getElementById('imgList');
+            if(imgList) new Sortable(imgList, { animation: 150, onEnd: () => {
+                const order = Array.from(imgList.children).map(el => el.dataset.id);
+                activeImages.sort((a,b) => order.indexOf(a.id) - order.indexOf(b.id));
+            }});
+
+            const mergePageList = document.getElementById('mergePageList');
+            if(mergePageList) new Sortable(mergePageList, { animation: 150, onEnd: () => {
+                const order = Array.from(mergePageList.children).map(el => el.dataset.id);
+                mergePages.sort((a,b) => order.indexOf(a.id) - order.indexOf(b.id));
+            }});
+        }
+
+        function setupDropZones() {
+            const setups = [
+                { id: 'dropZoneImg', input: 'inputImg', handler: handleImageFiles },
+                { id: 'dropZonePdf', input: 'inputPdf', handler: (f) => loadPdfToImg(f[0]) },
+                { id: 'dropZoneMerge', input: 'inputMerge', handler: handleMergeUploads },
+                { id: 'dropZoneSplit', input: 'inputSplit', handler: (f) => loadSplitPdf(f[0]) },
+                { id: 'dropZoneConv', input: 'inputConv', handler: handleConvUpload },
+                { id: 'dropZoneSvg', input: 'inputSvg', handler: (f) => handleSvgUpload(f) }
+            ];
+
+            setups.forEach(s => {
+                const zone = document.getElementById(s.id);
+                const input = document.getElementById(s.input);
+                if(!zone || !input) return;
+                zone.onclick = () => input.click();
+                input.onchange = (e) => s.handler(e.target.files);
+                zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('drag-over'); };
+                zone.ondragleave = () => zone.classList.remove('drag-over');
+                zone.ondrop = (e) => { e.preventDefault(); zone.classList.remove('drag-over'); s.handler(e.dataTransfer.files); };
+            });
+        }
+
+        // --- 圖片轉 PDF 專屬連動功能 ---
+        function toggleFitModeSelector() {
+            const size = document.getElementById('imgPageSize').value;
+            const fitModeWrapper = document.getElementById('fitModeWrapper');
+            const customSizeWrapper = document.getElementById('customSizeWrapper');
+            
+            if (size === 'custom') {
+                customSizeWrapper.classList.remove('hidden');
+            } else {
+                customSizeWrapper.classList.add('hidden');
+            }
+
+            if (size === 'original') {
+                fitModeWrapper.classList.add('opacity-40', 'pointer-events-none');
+            } else {
+                fitModeWrapper.classList.remove('opacity-40', 'pointer-events-none');
+            }
+        }
+
+        // 智慧型、高相容性 SVG 到 PNG 轉換助手（支援 ViewBox 解析）
+        async function convertSvgToHighResPng(svgDataUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const targetWidth = 3000; // 3000px 印刷級超高清解析度渲染
+                    
+                    let nativeWidth = img.width || 800;
+                    let nativeHeight = img.height || 600;
+
+                    if (!img.width || !img.height) {
+                        try {
+                            const decoded = decodeURIComponent(svgDataUrl.split(',')[1]);
+                            const parser = new DOMParser();
+                            const xmlDoc = parser.parseFromString(decoded, "image/svg+xml");
+                            const svgEl = xmlDoc.querySelector('svg');
+                            if (svgEl && svgEl.hasAttribute('viewBox')) {
+                                const vb = svgEl.getAttribute('viewBox').split(/\s+/);
+                                if (vb.length === 4) {
+                                    nativeWidth = parseFloat(vb[2]);
+                                    nativeHeight = parseFloat(vb[3]);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("智慧解析 SVG ViewBox 失敗，採用備用比例：", e);
+                        }
+                    }
+
+                    const aspectRatio = nativeHeight / nativeWidth;
+                    const targetHeight = targetWidth * aspectRatio;
+                    
+                    canvas.width = targetWidth;
+                    canvas.height = targetHeight;
+                    const ctx = canvas.getContext('2d');
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, targetWidth, targetHeight);
+                    
+                    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                    resolve(canvas.toDataURL('image/jpeg', 0.95));
+                };
+                img.onerror = (e) => reject(e);
+                img.src = svgDataUrl;
+            });
+        }
+
+        // --- 圖片轉 PDF 核心邏輯 ---
+        async function handleImageFiles(files) {
+            for(const f of files) {
+                if(!f.type.startsWith('image/') && !f.name.endsWith('.svg') && f.type !== 'image/svg+xml') continue;
+                
+                let dataUrl = await new Promise(r => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.readAsDataURL(f); });
+                let isSvg = f.type === 'image/svg+xml' || f.name.endsWith('.svg');
+
+                if (isSvg) {
+                    showToast("偵測到 SVG 向量圖，正在進行 3000px 高清超取樣轉換...", "info");
+                    try {
+                        dataUrl = await convertSvgToHighResPng(dataUrl);
+                    } catch (err) {
+                        console.error("SVG 預處理失敗:", err);
+                        showToast("SVG 載入異常，將採用降級相容模式", "error");
+                    }
+                }
+
+                const img = new Image();
+                img.src = dataUrl;
+                await img.decode();
+                
+                const id = Math.random().toString(36).substr(2,9);
+                activeImages.push({ id, dataUrl, width: img.width, height: img.height });
+                
+                const div = document.createElement('div');
+                div.dataset.id = id;
+                div.className = 'relative group bg-white p-1 rounded-lg border border-slate-200 cursor-move';
+                div.innerHTML = `
+                    <img src="${dataUrl}" class="w-full aspect-square object-cover rounded-md">
+                    <span class="absolute bottom-1.5 left-1.5 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono select-none">
+                        ${isSvg ? 'SVG 向量圖' : `${img.width}x${img.height} px`}
+                    </span>
+                    <button onclick="this.parentElement.remove(); activeImages=activeImages.filter(i=>i.id!=='${id}')" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                `;
+                document.getElementById('imgList').appendChild(div);
+            }
+            if(activeImages.length) document.getElementById('controlImg').classList.remove('hidden');
+        }
+
+        function clearImgList() {
+            activeImages = [];
+            document.getElementById('imgList').innerHTML = '';
+            document.getElementById('controlImg').classList.add('hidden');
+        }
+
+        async function generatePdfFromImg() {
+            if(!activeImages.length) return;
+            const btn = document.getElementById('btnGenImg');
+            btn.disabled = true; btn.innerText = "生成中...";
+            showToast("正在產生 PDF...");
+            try {
+                const { jsPDF } = window.jspdf;
+                const size = document.getElementById('imgPageSize').value;
+                const fitMode = document.getElementById('imgFitMode').value;
+                const margin = parseFloat(document.getElementById('imgMargin').value) || 0;
+                let doc;
+                
+                for(let i=0; i < activeImages.length; i++) {
+                    const img = new Image();
+                    img.src = activeImages[i].dataUrl;
+                    await img.decode();
+                    
+                    let pw, ph;
+                    if (size === 'a4-portrait') {
+                        pw = 210; ph = 297;
+                    } else if (size === 'a4-landscape') {
+                        pw = 297; ph = 210;
+                    } else if (size === 'a3-portrait') {
+                        pw = 297; ph = 420;
+                    } else if (size === 'a3-landscape') {
+                        pw = 420; ph = 297;
+                    } else if (size === 'a2-portrait') {
+                        pw = 420; ph = 594;
+                    } else if (size === 'a2-landscape') {
+                        pw = 594; ph = 420;
+                    } else if (size === 'a1-portrait') {
+                        pw = 594; ph = 841;
+                    } else if (size === 'a1-landscape') {
+                        pw = 841; ph = 594;
+                    } else if (size === 'custom') {
+                        pw = parseFloat(document.getElementById('imgCustomWidth').value) || 210;
+                        ph = parseFloat(document.getElementById('imgCustomHeight').value) || 297;
+                    } else { // 原始尺寸模式
+                        pw = img.width * 0.264583 + margin*2;
+                        ph = img.height * 0.264583 + margin*2;
+                    }
+                    
+                    if(i === 0) {
+                        doc = new jsPDF(pw > ph ? 'l' : 'p', 'mm', [pw, ph]);
+                    } else {
+                        doc.addPage([pw, ph], pw > ph ? 'l' : 'p');
+                    }
+                    
+                    const dw = pw - margin*2; 
+                    const dh = ph - margin*2;
+                    let fw, fh, x, y;
+                    
+                    if (size === 'original') {
+                        fw = img.width * 0.264583;
+                        fh = img.height * 0.264583;
+                        x = margin;
+                        y = margin;
+                    } else {
+                        if (fitMode === 'fit-width') {
+                            const ratio = dw / img.width;
+                            fw = dw;
+                            fh = img.height * ratio;
+                            x = margin;
+                            y = margin + (dh - fh) / 2;
+                        } else if (fitMode === 'contain') {
+                            const ratio = Math.min(dw/img.width, dh/img.height);
+                            fw = img.width * ratio;
+                            fh = img.height * ratio;
+                            x = margin + (dw - fw)/2;
+                            y = margin + (dh - fh)/2;
+                        } else if (fitMode === 'cover') {
+                            const ratio = Math.max(dw/img.width, dh/img.height);
+                            fw = img.width * ratio;
+                            fh = img.height * ratio;
+                            x = margin + (dw - fw)/2;
+                            y = margin + (dh - fh)/2;
+                        } else { 
+                            fw = dw;
+                            fh = dh;
+                            x = margin;
+                            y = margin;
+                        }
+                    }
+                    
+                    doc.addImage(activeImages[i].dataUrl, 'JPEG', x, y, fw, fh);
+                }
+                
+                doc.save('images_to_pdf.pdf');
+                showToast("PDF 下載成功", "success");
+            } catch(e) { 
+                console.error(e);
+                showToast("發生錯誤: " + e.message, "error"); 
+            }
+            btn.disabled = false;
+            btn.innerText = "產生 PDF";
+        }
+
+        // --- 圖片 ➔ SVG 向量化 核心邏輯 ---
+        async function handleSvgUpload(files) {
+            const file = files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+            svgFileName = file.name;
+            showToast("正在讀取圖片...", "info");
+
+            svgSourceImg = new Image();
+            svgSourceImg.onload = function() {
+                document.getElementById('svgSourcePreviewImg').src = svgSourceImg.src;
+                document.getElementById('svgOrigSizeLabel').innerText = `${svgSourceImg.width} x ${svgSourceImg.height} px`;
+                document.getElementById('svgControlArea').classList.remove('hidden');
+                document.getElementById('dropZoneSvg').classList.add('hidden');
+                
+                // 套用預設標準中彩
+                applySvgPreset('mid');
+            };
+
+            const reader = new FileReader();
+            reader.onload = (e) => svgSourceImg.src = e.target.result;
+            reader.readAsDataURL(file);
+        }
+
+        function clearSvgImg() {
+            svgSourceImg = null;
+            svgOutputString = "";
+            document.getElementById('svgControlArea').classList.add('hidden');
+            document.getElementById('dropZoneSvg').classList.remove('hidden');
+            document.getElementById('svgPreviewContainer').innerHTML = "";
+            document.getElementById('inputSvg').value = "";
+        }
+
+        function applySvgPreset(preset) {
+            // 切換 Active 按鈕樣式
+            document.querySelectorAll('.svg-preset-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+                btn.classList.add('bg-slate-50', 'text-slate-700');
+            });
+            const activeBtn = document.getElementById('btnSvgPreset-' + preset);
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-slate-50', 'text-slate-700');
+                activeBtn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+            }
+
+            const colorSliderWrapper = document.getElementById('svgColorSliderWrapper');
+            const colorSlider = document.getElementById('svgColors');
+            const detailSlider = document.getElementById('svgDetail');
+            const preprocessCheckbox = document.getElementById('svgPreprocess');
+            const blurSlider = document.getElementById('svgBlur');
+            const quantCyclesSlider = document.getElementById('svgQuantCycles');
+            const smoothingSlider = document.getElementById('svgSmoothing');
+
+            if (preset === 'mono') {
+                colorSlider.value = 2;
+                colorSliderWrapper.classList.add('opacity-40', 'pointer-events-none');
+                detailSlider.value = 3;
+                preprocessCheckbox.checked = true; // 簽名檔需要高對比
+                blurSlider.value = 0;
+                quantCyclesSlider.value = 5;
+                smoothingSlider.value = 0.2;
+            } else {
+                colorSliderWrapper.classList.remove('opacity-40', 'pointer-events-none');
+                if (preset === 'low') {
+                    colorSlider.value = 8;
+                    detailSlider.value = 2;
+                    preprocessCheckbox.checked = false;
+                    blurSlider.value = 0;
+                    quantCyclesSlider.value = 8;
+                    smoothingSlider.value = 0.5;
+                } else if (preset === 'mid') {
+                    colorSlider.value = 16;
+                    detailSlider.value = 3;
+                    preprocessCheckbox.checked = true;
+                    blurSlider.value = 0.5;
+                    quantCyclesSlider.value = 12;
+                    smoothingSlider.value = 0.35;
+                } else if (preset === 'high') {
+                    // 高級相片/人像專屬調優：極高色彩、高 K-means 循環次數、柔和曲線平滑與漸層混合
+                    colorSlider.value = 64;
+                    detailSlider.value = 4; // 曲線精細度
+                    preprocessCheckbox.checked = false; // 人像照片不進行過度對比文字預處理
+                    blurSlider.value = 1.2; // 預設柔焦，完美融合色塊邊界！
+                    quantCyclesSlider.value = 22; // 高達 22 次深度色彩修正，杜絕膚色發黃
+                    smoothingSlider.value = 0.65; // 調高平滑度，消除階梯鋸齒感
+                }
+            }
+
+            updateSvgSlidersAndReprocess();
+        }
+
+        function updateSvgSlidersAndReprocess() {
+            // 更新 slider 文字標籤
+            const colorVal = document.getElementById('svgColors').value;
+            document.getElementById('valSvgColors').innerText = colorVal + " 色";
+
+            const detailVal = parseInt(document.getElementById('svgDetail').value);
+            const detailTexts = ["極速/高度簡化", "輕微簡化", "中等平衡", "高精細路徑", "極致/保留細微噪點"];
+            document.getElementById('valSvgDetail').innerText = detailTexts[detailVal - 1];
+
+            const blurVal = document.getElementById('svgBlur').value;
+            document.getElementById('valSvgBlur').innerText = blurVal + "px";
+
+            const quantCyclesVal = document.getElementById('svgQuantCycles').value;
+            document.getElementById('valSvgQuantCycles').innerText = quantCyclesVal + " 次";
+
+            const smoothingVal = document.getElementById('svgSmoothing').value;
+            document.getElementById('valSvgSmoothing').innerText = smoothingVal;
+
+            // 防抖，避免連續拖動進度條卡頓
+            clearTimeout(svgReprocessTimeout);
+            svgReprocessTimeout = setTimeout(() => {
+                processImageToSvg();
+            }, 180);
+        }
+
+        // 主執行緒同步算圖後備方案（徹底防護 CSP 與 sandboxed iframe 的 Web Worker runtime 崩潰）
+        function runSvgConversionMainThread(finalImgData, options, blurVal, previewContainer, btnSave) {
+            setTimeout(() => {
+                try {
+                    let svgString = ImageTracer.imagedataToSVG(finalImgData, options);
+                    displaySvgResult(svgString, blurVal, previewContainer, btnSave);
+                } catch (syncErr) {
+                    console.error("同步算圖亦發生錯誤: ", syncErr);
+                    previewContainer.innerHTML = `<span class="text-xs text-red-500 font-bold px-4 text-center">轉換發生異常：${syncErr.message}<br>建議將尺寸限制設定為「快速預覽」或減少色彩數。</span>`;
+                    showToast("向量化失敗", "error");
+                }
+            }, 30);
+        }
+
+        // 渲染與輸出 SVG 的共用方法
+        function displaySvgResult(svgString, blurVal, previewContainer, btnSave) {
+            // 色彩漸層融合：注入高斯濾鏡
+            if (blurVal > 0) {
+                const filterHtml = `<defs><filter id="smooth-blend"><feGaussianBlur stdDeviation="${blurVal}" /></filter></defs>`;
+                const svgTagEnd = svgString.indexOf('>');
+                if (svgTagEnd !== -1) {
+                    svgString = svgString.substring(0, svgTagEnd + 1) + filterHtml + svgString.substring(svgTagEnd + 1);
+                    // 將高斯柔焦應用至向量主體
+                    svgString = svgString.replace('<g ', '<g filter="url(#smooth-blend)" ');
+                }
+            }
+
+            svgOutputString = svgString;
+            previewContainer.innerHTML = svgString;
+            
+            const svgEl = previewContainer.querySelector('svg');
+            if(svgEl) {
+                svgEl.setAttribute('class', 'w-full h-full max-h-full object-contain');
+            }
+
+            btnSave.disabled = false;
+            showToast("向量化轉換完成！", "success");
+        }
+
+        async function processImageToSvg() {
+            if (!svgSourceImg) return;
+
+            const previewContainer = document.getElementById('svgPreviewContainer');
+            const btnSave = document.getElementById('btnSaveSvg');
+            btnSave.disabled = true;
+            
+            // 建立極致美觀的進度條控制面板
+            previewContainer.innerHTML = `
+                <div class="w-full max-w-sm p-6 bg-white rounded-2xl border border-slate-200/80 shadow-md flex flex-col items-center justify-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                    <div class="loader"></div>
+                    <div class="w-full text-center">
+                        <p class="text-sm font-bold text-slate-700">正在全力進行高精度向量化算圖...</p>
+                        <p class="text-[11px] text-slate-400 mt-1 leading-normal">此步驟完全在您本地端安全處理，不外流個人隱私</p>
+                    </div>
+                    <!-- 進度條 -->
+                    <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div id="svgProgressBar" class="bg-blue-600 h-full rounded-full transition-all duration-100 ease-out" style="width: 0%"></div>
+                    </div>
+                    <div class="w-full flex justify-between text-[10px] font-mono font-bold text-slate-400">
+                        <span id="svgProgressPercent">0%</span>
+                        <span id="svgProgressTimer">預估剩餘時間: 計算中...</span>
+                    </div>
+                </div>
+            `;
+
+            // 參數換算與配置
+            const maxColors = parseInt(document.getElementById('svgColors').value);
+            const detailLevel = parseInt(document.getElementById('svgDetail').value);
+            const doPreprocess = document.getElementById('svgPreprocess').checked;
+            const blurVal = parseFloat(document.getElementById('svgBlur').value) || 0;
+            const maxResSetting = document.getElementById('svgMaxResolution').value;
+            const quantCycles = parseInt(document.getElementById('svgQuantCycles').value) || 10;
+            const smoothingVal = parseFloat(document.getElementById('svgSmoothing').value) || 0.35;
+
+            // 1. 建立虛擬 Canvas，根據用戶選擇的解析度限制進行比例解算
+            const tempCvs = document.createElement('canvas');
+            let scale = 1;
+            
+            if (maxResSetting !== 'original') {
+                const maxDim = parseInt(maxResSetting) || 1200;
+                scale = Math.min(1, maxDim / Math.max(svgSourceImg.width, svgSourceImg.height));
+            }
+            
+            tempCvs.width = svgSourceImg.width * scale;
+            tempCvs.height = svgSourceImg.height * scale;
+            const tempCtx = tempCvs.getContext('2d');
+
+            // 2. 套用高解析預處理對比度
+            if (doPreprocess) {
+                tempCtx.filter = 'contrast(1.25) saturate(1.1)';
+            }
+            
+            tempCtx.imageSmoothingEnabled = true;
+            tempCtx.imageSmoothingQuality = 'high';
+            tempCtx.drawImage(svgSourceImg, 0, 0, tempCvs.width, tempCvs.height);
+            tempCtx.filter = 'none'; // 重設
+
+            // 3. 獲取像素資料以套用細節卷積
+            const imgData = tempCtx.getImageData(0, 0, tempCvs.width, tempCvs.height);
+
+            // 啟用預處理時，針對海報進行一次高清卷積銳化，拉出文字物理邊緣
+            if (doPreprocess) {
+                convolutionSharpen(imgData, 0.35); // 0.35 度的物理強度
+                tempCtx.putImageData(imgData, 0, 0);
+            }
+
+            // 4. 設定 ImageTracer.js 進階高級擬合參數
+            // 透過 ltres 與 qtres 套用曲線平滑度滑桿設定，撫平色塊鋸齒！
+            const pathOmitValues = [12, 6, 2, 1, 0]; // 0 代表保留極限微小字點與標點
+            const pathOmit = pathOmitValues[detailLevel - 1];
+
+            const roundCoordsValues = [1, 1, 2, 3, 4]; // 提高精度避免字框失真扭曲
+            const roundcoords = roundCoordsValues[detailLevel - 1];
+
+            const options = {
+                corsenabled: false,
+                ltres: smoothingVal,
+                qtres: smoothingVal * 1.5,
+                pathomit: pathOmit,
+                rightangleenhance: detailLevel >= 4 ? true : false, // 開啟印刷物專用直角擬合
+                colorsampling: 2, // 智慧彩色採樣
+                numberofcolors: maxColors,
+                mincolorratio: 0.00002, // 大幅降低剔除率，保護人像亮部與暗部的細微漸層
+                colorquantcycles: quantCycles, // 智慧設定或用戶手動調整的色彩深度修正次數
+                scale: 1,
+                viewbox: true,
+                roundcoords: roundcoords,
+                desc: false
+            };
+
+            if (maxColors === 2) {
+                options.colorsampling = 1;
+                options.colorquantcycles = 1;
+            }
+
+            // 5. 智慧運算預估等待時間（以像素點、顏色上限和細緻度加權計算）
+            const w = tempCvs.width;
+            const h = tempCvs.height;
+            const complexityFactor = (w * h * maxColors * detailLevel);
+            let estSeconds = Math.max(3, Math.round(complexityFactor / 16000000));
+            if (maxColors > 64) estSeconds *= 1.4;
+            if (maxResSetting === 'original') estSeconds *= 1.5;
+            estSeconds = Math.round(estSeconds);
+
+            // 6. 初始化進度條與倒數計時計時器
+            let currentPercent = 0;
+            let startTime = Date.now();
+            const progressBar = document.getElementById('svgProgressBar');
+            const progressPercent = document.getElementById('svgProgressPercent');
+            const progressTimer = document.getElementById('svgProgressTimer');
+
+            const progressInterval = setInterval(() => {
+                const elapsed = (Date.now() - startTime) / 1000;
+                // 非線性漸近曲線逼近，保證在未完成時會緩慢逼近 98%
+                if (currentPercent < 98) {
+                    const targetPercent = 98 * (1 - Math.exp(-elapsed / (estSeconds * 0.7)));
+                    currentPercent = Math.max(currentPercent, targetPercent);
+                }
+                
+                if (progressBar) progressBar.style.width = currentPercent + "%";
+                if (progressPercent) progressPercent.innerText = Math.round(currentPercent) + "%";
+                
+                const remaining = Math.max(1, Math.round(estSeconds - elapsed));
+                if (progressTimer) {
+                    progressTimer.innerText = currentPercent >= 97 
+                        ? "正在精細整合向量路徑..." 
+                        : `預估剩餘時間: 約 ${remaining} 秒`;
+                }
+            }, 100);
+
+            // 7. 使用 Web Worker 背景執行緒。若因沙盒限制報錯，無縫秒級Fallback至主執行緒！
+            const finalImgData = tempCtx.getImageData(0, 0, tempCvs.width, tempCvs.height);
+            let worker = null;
+
+            try {
+                // 建立行內 Worker Blob
+                const blobCode = `
+                    self.onmessage = function(e) {
+                        const { imgData, options, tracerUrl } = e.data;
+                        try {
+                            importScripts(tracerUrl);
+                            if (typeof ImageTracer === 'undefined') {
+                                throw new Error("ImageTracer 未載入");
+                            }
+                            const svgString = ImageTracer.imagedataToSVG(imgData, options);
+                            self.postMessage({ success: true, svgString: svgString });
+                        } catch (err) {
+                            self.postMessage({ success: false, error: err.message });
+                        }
+                    };
+                `;
+                const blob = new Blob([blobCode], { type: "text/javascript" });
+                const workerUrl = URL.createObjectURL(blob);
+                worker = new Worker(workerUrl);
+                
+                const tracerUrl = "https://cdn.jsdelivr.net/npm/imagetracerjs/imagetracer_v1.2.6.js";
+                
+                // 設定 Worker 超時與執行期錯誤捕獲，一旦報錯即刻觸發 fallback
+                worker.onerror = function(e) {
+                    console.warn("Worker 背景編譯發生安全或路徑錯誤，啟動無縫 Fallback 到主執行緒：", e);
+                    clearInterval(progressInterval);
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                    runSvgConversionMainThread(finalImgData, options, blurVal, previewContainer, btnSave);
+                };
+
+                worker.onmessage = function(event) {
+                    clearInterval(progressInterval);
+                    const res = event.data;
+                    if (res.success) {
+                        if (progressBar) progressBar.style.width = "100%";
+                        if (progressPercent) progressPercent.innerText = "100%";
+                        if (progressTimer) progressTimer.innerText = "完成！";
+                        
+                        setTimeout(() => {
+                            displaySvgResult(res.svgString, blurVal, previewContainer, btnSave);
+                        }, 200);
+                    } else {
+                        // 執行期錯誤，進行 fallback
+                        console.warn("Worker 執行回報失敗，執行主執行緒 fallback:", res.error);
+                        runSvgConversionMainThread(finalImgData, options, blurVal, previewContainer, btnSave);
+                    }
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                };
+
+                // 發送數據給背景 Worker
+                worker.postMessage({
+                    imgData: finalImgData,
+                    options: options,
+                    tracerUrl: tracerUrl
+                });
+
+            } catch (workerErr) {
+                console.warn("不支援多執行緒 Worker 或受安全原則阻擋，自動執行主執行緒備用算圖方案:", workerErr);
+                runSvgConversionMainThread(finalImgData, options, blurVal, previewContainer, btnSave);
+            }
+        }
+
+        // 智慧型向量 SVG 到 高清點陣圖 (PNG/JPG) 的前端放大導出核心
+        async function exportSvgToBitmap() {
+            if (!svgOutputString) return;
+            const multiplier = parseFloat(document.getElementById('svgExportScale').value) || 2;
+            const format = document.getElementById('svgExportFormat').value; // 'image/png' 或 'image/jpeg'
+            const ext = format === 'image/png' ? 'png' : 'jpg';
+
+            showToast(`正在產生 ${multiplier}x 高清點陣圖...`, "info");
+
+            const blob = new Blob([svgOutputString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+
+            img.onload = () => {
+                // 讀取 SVG 的 viewBox 或原始比例來計算高清畫布尺寸
+                let width = svgSourceImg.width || 800;
+                let height = svgSourceImg.height || 600;
+
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(svgOutputString, "image/svg+xml");
+                const svgEl = xmlDoc.querySelector('svg');
+                if (svgEl) {
+                    if (svgEl.hasAttribute('viewBox')) {
+                        const vb = svgEl.getAttribute('viewBox').split(/\s+/);
+                        if (vb.length === 4) {
+                            width = parseFloat(vb[2]);
+                            height = parseFloat(vb[3]);
+                        }
+                    } else if (svgEl.hasAttribute('width') && svgEl.hasAttribute('height')) {
+                        width = parseFloat(svgEl.getAttribute('width'));
+                        height = parseFloat(svgEl.getAttribute('height'));
+                    }
+                }
+
+                const targetW = width * multiplier;
+                const targetH = height * multiplier;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = targetW;
+                canvas.height = targetH;
+                const ctx = canvas.getContext('2d');
+
+                // 若為 JPG，則預先填充純白背景底色（防止 PNG 的透明區域變成全黑）
+                if (format === 'image/jpeg') {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, targetW, targetH);
+                }
+
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, targetW, targetH);
+
+                canvas.toBlob((resultBlob) => {
+                    const downloadUrl = URL.createObjectURL(resultBlob);
+                    const a = document.createElement('a');
+                    const rawName = svgFileName.substring(0, svgFileName.lastIndexOf('.')) || "vectorized";
+                    a.download = `${rawName}_${multiplier}x.${ext}`;
+                    a.href = downloadUrl;
+                    a.click();
+                    
+                    URL.revokeObjectURL(downloadUrl);
+                    URL.revokeObjectURL(url);
+                    showToast("高清圖片匯出成功！", "success");
+                }, format, format === 'image/jpeg' ? 0.95 : undefined);
+            };
+
+            img.onerror = (err) => {
+                console.error(err);
+                showToast("圖片匯出失敗", "error");
+                URL.revokeObjectURL(url);
+            };
+
+            img.src = url;
+        }
+
+        // 3x3 卷積銳化演算法
+        function convolutionSharpen(imgData, strength) {
+            const data = imgData.data;
+            const w = imgData.width;
+            const h = imgData.height;
+            const copy = new Uint8ClampedArray(data);
+
+            const s = strength;
+            const center = 1 + 4 * s;
+
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
+                    const idx = (y * w + x) * 4;
+
+                    for (let c = 0; c < 3; c++) {
+                        const val = 
+                            copy[idx + c] * center +
+                            copy[(idx - 4) + c] * -s +
+                            copy[(idx + 4) + c] * -s +
+                            copy[(idx - w * 4) + c] * -s +
+                            copy[(idx + w * 4) + c] * -s;
+
+                        data[idx + c] = Math.min(255, Math.max(0, val));
+                    }
+                }
+            }
+        }
+
+        // --- PDF ➔ 圖片 ---
+        async function loadPdfToImg(file) {
+            if(!file || file.type !== 'application/pdf') return;
+            currentPdfToImgFile = file;
+            const grid = document.getElementById('pdfToImgPreviewGrid');
+            grid.innerHTML = '<div class="col-span-full py-10 text-center"><div class="loader"></div></div>';
+            document.getElementById('pdfToImgActionArea').classList.remove('hidden');
+            try {
+                const data = new Uint8Array(await file.arrayBuffer());
+                const pdf = await pdfjsLib.getDocument(data).promise;
+                document.getElementById('pdfToImgInfo').innerText = `📄 ${file.name} (共 ${pdf.numPages} 頁)`;
+                grid.innerHTML = '';
+                for(let i=1; i<=Math.min(pdf.numPages, 8); i++) {
+                    const page = await pdf.getPage(i);
+                    const vp = page.getViewport({scale: 0.3});
+                    
+                    const origVp = page.getViewport({scale: 1.0});
+                    const wMm = Math.round(origVp.width * 0.352777);
+                    const hMm = Math.round(origVp.height * 0.352777);
+
+                    const cvs = document.createElement('canvas');
+                    cvs.width = vp.width; cvs.height = vp.height;
+                    await page.render({canvasContext: cvs.getContext('2d'), viewport: vp}).promise;
+                    
+                    grid.innerHTML += `
+                        <div class="p-1 border border-slate-200 rounded bg-white shadow-sm relative">
+                            <img src="${cvs.toDataURL()}" class="w-full h-auto rounded">
+                            <div class="absolute bottom-8 left-1.5 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono select-none">${wMm}x${hMm} mm</div>
+                            <p class="text-[10px] text-slate-400 mt-1 font-medium">Page ${i}</p>
+                        </div>
+                    `;
+                }
+            } catch(e) { showToast("載入失敗", "error"); }
+        }
+
+        async function convertPdfToImages() {
+            if(!currentPdfToImgFile) return;
+            const btn = document.getElementById('btnGenPdfImgs');
+            btn.disabled = true;
+            try {
+                const zip = new JSZip();
+                const data = new Uint8Array(await currentPdfToImgFile.arrayBuffer());
+                const pdf = await pdfjsLib.getDocument(data).promise;
+                for(let i=1; i<=pdf.numPages; i++){
+                    btn.innerText = `轉換中 ${i}/${pdf.numPages}`;
+                    const page = await pdf.getPage(i);
+                    const vp = page.getViewport({scale: 2.0});
+                    const cvs = document.createElement('canvas');
+                    cvs.width = vp.width; cvs.height = vp.height;
+                    await page.render({canvasContext: cvs.getContext('2d'), viewport: vp}).promise;
+                    const blob = await new Promise(r => cvs.toBlob(r, 'image/png'));
+                    zip.file(`page_${i}.png`, blob);
+                }
+                const content = await zip.generateAsync({type:"blob"});
+                const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = "pdf_images.zip"; a.click();
+                showToast("下載成功", "success");
+            } catch(e) { showToast("轉換失敗", "error"); }
+            btn.disabled = false; btn.innerText = "下載所有頁面 (ZIP)";
+        }
+
+        // --- PDF 合併與排序 ---
+        async function handleMergeUploads(files) {
+            showToast("正在解析 PDF 頁面...");
+            for(const f of files) {
+                if(f.type !== 'application/pdf') continue;
+                const bytes = new Uint8Array(await f.arrayBuffer());
+                
+                const bytesForPreview = bytes.slice(0);
+                const pdfDoc = await pdfjsLib.getDocument({ data: bytesForPreview }).promise;
+                
+                for(let i=1; i<=pdfDoc.numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const vp = page.getViewport({scale: 0.3});
+                    
+                    const origVp = page.getViewport({scale: 1.0});
+                    const wMm = Math.round(origVp.width * 0.352777);
+                    const hMm = Math.round(origVp.height * 0.352777);
+
+                    const cvs = document.createElement('canvas');
+                    cvs.width = vp.width; cvs.height = vp.height;
+                    await page.render({canvasContext: cvs.getContext('2d'), viewport: vp}).promise;
+                    const dataUrl = cvs.toDataURL();
+                    const id = Math.random().toString(36).substr(2,9);
+                    
+                    mergePages.push({ id, pdfBytes: bytes, pageIndex: i-1, dataUrl });
+                    
+                    const div = document.createElement('div');
+                    div.dataset.id = id;
+                    div.className = "relative bg-white p-1 rounded-lg border border-slate-200 shadow-sm cursor-move group";
+                    div.innerHTML = `
+                        <img src="${dataUrl}" class="w-full h-auto rounded">
+                        <div class="absolute top-1 left-1 bg-black/50 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded truncate max-w-[85%]">${f.name.substring(0,8)}... P${i}</div>
+                        <div class="absolute bottom-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono select-none">${wMm}x${hMm} mm</div>
+                        <button onclick="removeMergePage('${id}')" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md">✕</button>
+                    `;
+                    document.getElementById('mergePageList').appendChild(div);
+                }
+            }
+            updateMergeUI();
+        }
+
+        function removeMergePage(id) {
+            mergePages = mergePages.filter(p => p.id !== id);
+            document.querySelector(`#mergePageList [data-id="${id}"]`).remove();
+            updateMergeUI();
+        }
+
+        function updateMergeUI() {
+            document.getElementById('mergeCount').innerText = `已載入 ${mergePages.length} 個頁面`;
+            document.getElementById('mergeControl').classList.toggle('hidden', mergePages.length === 0);
+        }
+
+        function clearMergeList() {
+            mergePages = [];
+            document.getElementById('mergePageList').innerHTML = '';
+            updateMergeUI();
+        }
+
+        async function processPdfMerge() {
+            if(!mergePages.length) return;
+            showToast("正在合併並產生 PDF...");
+            try {
+                const { PDFDocument } = PDFLib;
+                const mergedPdf = await PDFDocument.create();
+                const loadedDocs = new Map();
+
+                for(const item of mergePages) {
+                    let sourceDoc;
+                    const key = item.pdfBytes.buffer;
+                    if(loadedDocs.has(key)) {
+                        sourceDoc = loadedDocs.get(key);
+                    } else {
+                        sourceDoc = await PDFDocument.load(item.pdfBytes);
+                        loadedDocs.set(key, sourceDoc);
+                    }
+                    
+                    const [copiedPage] = await mergedPdf.copyPages(sourceDoc, [item.pageIndex]);
+                    mergedPdf.addPage(copiedPage);
+                }
+                
+                const pdfBytes = await mergedPdf.save();
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = "merged_ordered.pdf"; a.click();
+                showToast("合併成功！", "success");
+            } catch(e) {
+                console.error(e);
+                showToast("合併過程發生錯誤", "error");
+            }
+        }
+
+        // --- PDF 視覺分割 ---
+        async function loadSplitPdf(file) {
+            if(!file || file.type !== 'application/pdf') return;
+            showToast("正在讀取檔案預覽...");
+            const grid = document.getElementById('splitPageList');
+            grid.innerHTML = '<div class="col-span-full py-10 text-center"><div class="loader"></div></div>';
+            document.getElementById('splitControl').classList.remove('hidden');
+            
+            try {
+                splitSourceBytes = new Uint8Array(await file.arrayBuffer());
+                
+                const bytesForPreview = splitSourceBytes.slice(0);
+                const pdf = await pdfjsLib.getDocument({ data: bytesForPreview }).promise;
+                
+                document.getElementById('splitFileInfo').innerText = `📄 ${file.name} (共 ${pdf.numPages} 頁)`;
+                grid.innerHTML = '';
+                splitPageData = [];
+
+                for(let i=1; i<=pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const vp = page.getViewport({scale: 0.3});
+                    
+                    const origVp = page.getViewport({scale: 1.0});
+                    const wMm = Math.round(origVp.width * 0.352777);
+                    const hMm = Math.round(origVp.height * 0.352777);
+
+                    const cvs = document.createElement('canvas');
+                    cvs.width = vp.width; cvs.height = vp.height;
+                    await page.render({canvasContext: cvs.getContext('2d'), viewport: vp}).promise;
+                    const dataUrl = cvs.toDataURL();
+                    
+                    splitPageData.push({ index: i-1, selected: false });
+
+                    const div = document.createElement('div');
+                    div.dataset.index = i-1;
+                    div.className = "pdf-page-card relative bg-white p-1 rounded-lg border-2 border-transparent shadow-sm cursor-pointer hover:border-blue-200 transition-all";
+                    div.innerHTML = `
+                        <img src="${dataUrl}" class="w-full h-auto rounded">
+                        <div class="absolute top-1 right-1 check-badge w-6 h-6 bg-blue-500 text-white rounded-full items-center justify-center hidden shadow-sm font-bold">✓</div>
+                        <div class="absolute bottom-1.5 left-1.5 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono select-none">${wMm}x${hMm} mm</div>
+                        <div class="absolute bottom-1.5 right-1.5 bg-black/30 text-white text-[10px] px-1 rounded">${i}</div>
+                    `;
+                    div.onclick = () => togglePageSelection(i-1);
+                    grid.appendChild(div);
+                }
+            } catch(e) { showToast("載入失敗", "error"); }
+        }
+
+        function togglePageSelection(index) {
+            splitPageData[index].selected = !splitPageData[index].selected;
+            const el = document.querySelector(`#splitPageList [data-index="${index}"]`);
+            el.classList.toggle('selected', splitPageData[index].selected);
+        }
+
+        function selectAllSplit(val) {
+            splitPageData.forEach((p, idx) => {
+                p.selected = val;
+                const el = document.querySelector(`#splitPageList [data-index="${idx}"]`);
+                if(val) el.classList.add('selected'); else el.classList.remove('selected');
+            });
+        }
+
+        async function processPdfSplit(combineAsOne) {
+            const selectedIndices = splitPageData.filter(p => p.selected).map(p => p.index);
+            if(selectedIndices.length === 0) {
+                showToast("請至少選取一頁", "error");
+                return;
+            }
+
+            showToast("處理中...");
+            const { PDFDocument } = PDFLib;
+            try {
+                const sourceDoc = await PDFDocument.load(splitSourceBytes);
+                
+                if(combineAsOne) {
+                    const newPdf = await PDFDocument.create();
+                    const copiedPages = await newPdf.copyPages(sourceDoc, selectedIndices);
+                    copiedPages.forEach(p => newPdf.addPage(p));
+                    const bytes = await newPdf.save();
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'})); a.download = "extracted_pages.pdf"; a.click();
+                } else {
+                    const zip = new JSZip();
+                    for(const idx of selectedIndices) {
+                        const newPdf = await PDFDocument.create();
+                        const [p] = await newPdf.copyPages(sourceDoc, [idx]);
+                        newPdf.addPage(p);
+                        const bytes = await newPdf.save();
+                        zip.file(`page_${idx+1}.pdf`, bytes);
+                    }
+                    const content = await zip.generateAsync({type:"blob"});
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = "split_pages.zip"; a.click();
+                }
+                showToast("分割/提取成功！", "success");
+            } catch(e) { showToast("處理失敗", "error"); }
+        }
+
+        // --- 圖片格式轉換 ---
+        async function handleConvUpload(files) {
+            for(const f of files) {
+                if(!f.type.startsWith('image/')) continue;
+                const id = Math.random().toString(36).substr(2,9);
+                const url = URL.createObjectURL(f);
+                
+                const img = new Image();
+                img.src = url;
+                await img.decode();
+                
+                convFiles.push({ id, file: f, url });
+                const div = document.createElement('div');
+                div.dataset.id = id;
+                div.className = "relative p-1 border rounded bg-white shadow-sm group";
+                div.innerHTML = `
+                    <img src="${url}" class="w-full aspect-square object-cover rounded">
+                    <span class="absolute bottom-1.5 left-1.5 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono select-none">${img.width}x${img.height} px</span>
+                    <button onclick="this.parentElement.remove(); convFiles=convFiles.filter(c=>c.id!=='${id}')" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                `;
+                document.getElementById('convList').appendChild(div);
+            }
+            if(convFiles.length) document.getElementById('convControl').classList.remove('hidden');
+        }
+
+        async function processImageConversion() {
+            const format = document.getElementById('targetFormat').value;
+            const ext = format.split('/')[1];
+            const zip = new JSZip();
+            showToast("正在轉換...");
+            try {
+                for(const item of convFiles) {
+                    const img = new Image(); img.src = item.url; await img.decode();
+                    const cvs = document.createElement('canvas'); cvs.width = img.width; cvs.height = img.height;
+                    cvs.getContext('2d').drawImage(img, 0, 0);
+                    const blob = await new Promise(r => canvas.toBlob(r, format, 0.9));
+                    zip.file(item.file.name.split('.')[0] + "." + ext, blob);
+                }
+                const content = await zip.generateAsync({type:"blob"});
+                const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = "converted_images.zip"; a.click();
+                showToast("轉換成功", "success");
+            } catch(e) { showToast("轉換失敗", "error"); }
+        }
+    </script>
+</body>
+</html>
