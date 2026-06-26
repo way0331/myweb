@@ -480,24 +480,24 @@
 
         // 優先讀取雲端配置：1. 注入環境 2. 手機儲存 3. 上方寫死
         function getActiveFirebaseConfig() {
-            // 優先：檢測環境注入
+            // 若程式內已寫入正式 Firebase 設定，優先使用，避免舊手機 localStorage 裡的舊設定蓋掉正式設定
+            if (hardcodedFirebaseConfig && hardcodedFirebaseConfig.apiKey) {
+                return hardcodedFirebaseConfig;
+            }
+
+            // 其次：檢測環境注入
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
                 const envConfig = JSON.parse(__firebase_config);
                 if (envConfig && envConfig.apiKey) return envConfig;
             }
 
-            // 次之：手機或設備 localStorage 中的客製化貼上
+            // 最後：手機或設備 localStorage 中的客製化貼上
             const stored = localStorage.getItem('custom_firebase_config');
             if (stored) {
                 try {
                     const parsed = JSON.parse(stored);
                     if (parsed && parsed.apiKey) return parsed;
                 } catch(e) {}
-            }
-
-            // 最後：讀取本程式寫死的設定
-            if (hardcodedFirebaseConfig && hardcodedFirebaseConfig.apiKey) {
-                return hardcodedFirebaseConfig;
             }
 
             return null;
@@ -526,6 +526,51 @@
             { level: 3, num: 1, text: "當面臨極度焦慮的人生難題時，主答者會？", options: ["去廟裡求神問卜/算命", "找最知心的好朋友訴苦", "獨自一人鎖在房間發呆", "瘋狂運動或暴飲暴食發洩"] },
             { level: 3, num: 2, text: "若能隨機擁有一種超能力，主答者最渴望？", options: ["穿越時空回到過去", "讀心術看透身邊所有人", "瞬間移動省去通勤時間", "隱形能力隨心所欲探險"] }
         ];
+
+        function createDefaultSessionState() {
+            return {
+                currentLevel: 1,
+                currentQuestionNum: 1,
+                status: 'voting',
+                currentMainAnswer: null,
+                mainPlayerAnswers: {},
+                questions: DEFAULT_QUESTIONS
+            };
+        }
+
+        // 先給畫面一份本機預設狀態，避免 Firebase 第一次回應前一直顯示「題目載入中」
+        currentSessionState = createDefaultSessionState();
+
+        function getSessionRef() {
+            return doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+        }
+
+        function getParticipantsCollectionRef() {
+            return collection(db, 'artifacts', appId, 'public', 'data', 'participants');
+        }
+
+        function getParticipantRef(uid) {
+            return doc(db, 'artifacts', appId, 'public', 'data', 'participants', uid);
+        }
+
+        async function ensureGameSessionExists() {
+            if (isSimulation || !db || !auth || !auth.currentUser) return;
+            const sessionRef = getSessionRef();
+            const snap = await getDoc(sessionRef);
+            if (!snap.exists()) {
+                await setDoc(sessionRef, createDefaultSessionState(), { merge: true });
+            }
+        }
+
+        async function mergeSessionPatch(patch) {
+            if (isSimulation || !db || !auth || !auth.currentUser) return;
+            await setDoc(getSessionRef(), patch, { merge: true });
+        }
+
+        async function upsertParticipant(uid, data) {
+            if (isSimulation || !db || !auth || !auth.currentUser || !uid) return;
+            await setDoc(getParticipantRef(uid), data, { merge: true });
+        }
 
         // 跨頁面通訊通道 (僅適用於單一裝置多分頁)
         const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('banquet_game_sim_channel') : null;
@@ -630,14 +675,7 @@
                 indicator.classList.add('bg-amber-950/80', 'text-amber-400', 'border-amber-800');
             }
 
-            currentSessionState = {
-                currentLevel: 1,
-                currentQuestionNum: 1,
-                status: 'voting',
-                currentMainAnswer: null,
-                mainPlayerAnswers: {},
-                questions: DEFAULT_QUESTIONS
-            };
+            currentSessionState = createDefaultSessionState();
 
             const savedSession = localStorage.getItem('sim_session_state');
             if (savedSession) {
@@ -768,7 +806,9 @@
                         if (savedName && inputField) {
                             inputField.value = savedName;
                         }
+                        ensureGameSessionExists().catch(err => console.error("Ensure session failed:", err));
                         if (activeRole) {
+                            handleSessionStateChange(currentSessionState);
                             startRealtimeSync();
                         }
                     }
@@ -792,6 +832,9 @@
                 return;
             }
 
+            handleSessionStateChange(currentSessionState);
+            renderLeaderboardAndProgress();
+
             if (unsubscribeSession) {
                 unsubscribeSession();
                 unsubscribeSession = null;
@@ -801,7 +844,7 @@
                 unsubscribeParticipants = null;
             }
 
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             unsubscribeSession = onSnapshot(sessionRef, (docSnap) => {
                 if (docSnap.exists()) {
                     currentSessionState = docSnap.data();
@@ -813,7 +856,7 @@
                 console.error("Session sync failed:", error);
             });
 
-            const participantsRef = collection(db, 'artifacts', appId, 'public', 'data', 'participants');
+            const participantsRef = getParticipantsCollectionRef();
             unsubscribeParticipants = onSnapshot(participantsRef, (querySnap) => {
                 allParticipantsSnapshot = [];
                 querySnap.forEach((doc) => {
@@ -830,17 +873,12 @@
 
         async function initializeGameSession() {
             if (isSimulation) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
-            const defaultState = {
-                currentLevel: 1,
-                currentQuestionNum: 1,
-                status: 'voting',
-                currentMainAnswer: null,
-                mainPlayerAnswers: {},
-                questions: DEFAULT_QUESTIONS
-            };
+            const sessionRef = getSessionRef();
             try {
-                await setDoc(sessionRef, defaultState);
+                const defaultState = createDefaultSessionState();
+                currentSessionState = defaultState;
+                handleSessionStateChange(currentSessionState);
+                await setDoc(sessionRef, defaultState, { merge: true });
             } catch (err) {
                 console.error("Initialize session failed:", err);
             }
@@ -1293,27 +1331,14 @@
                 return;
             }
 
-            const pRef = doc(db, 'artifacts', appId, 'public', 'data', 'participants', myUid);
-            getDoc(pRef).then((docSnap) => {
-                if (!docSnap.exists()) {
-                    setDoc(pRef, {
-                        name: nameVal,
-                        joinedAt: Date.now(),
-                        answers: {}
-                    }).then(() => {
-                        selectRole('participant');
-                    }).catch(err => {
-                        selectRole('participant');
-                    });
-                } else {
-                    updateDoc(pRef, { name: nameVal }).then(() => {
-                        selectRole('participant');
-                    }).catch(err => {
-                        selectRole('participant');
-                    });
-                }
-            }).catch(err => {
+            upsertParticipant(myUid, {
+                name: nameVal,
+                joinedAt: Date.now()
+            }).then(() => {
                 selectRole('participant');
+            }).catch(err => {
+                console.error("Join participant failed:", err);
+                showToast("加入失敗，請確認 Firestore 規則與網路連線");
             });
         };
 
@@ -1329,9 +1354,9 @@
             }
 
             if (!db || !currentSessionState || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             try {
-                await updateDoc(sessionRef, {
+                await mergeSessionPatch({
                     currentMainAnswer: ans
                 });
                 showToast(`已鎖定真實答案：${ans}`, true);
@@ -1366,15 +1391,18 @@
             }
 
             if (!db || !auth || !auth.currentUser) return;
-            const pRef = doc(db, 'artifacts', appId, 'public', 'data', 'participants', myUid);
+            const savedName = localStorage.getItem('guest_name') || "神秘嘉賓";
             try {
-                await updateDoc(pRef, {
-                    [`answers.${currentQId}`]: ans
+                await upsertParticipant(myUid, {
+                    name: savedName,
+                    answers: {
+                        [currentQId]: ans
+                    }
                 });
                 showToast(`已送出您的預測：${ans}`, true);
             } catch (err) {
                 console.error(err);
-                showToast("送出答案失敗");
+                showToast("送出答案失敗，請稍後再試");
             }
         };
 
@@ -1415,9 +1443,9 @@
             }
 
             if (!db || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             try {
-                await updateDoc(sessionRef, {
+                await mergeSessionPatch({
                     questions: questionsList
                 });
                 showToast("已成功更新並實時發佈此題內容！", true);
@@ -1451,8 +1479,8 @@
                 }
 
                 if (!db || !auth || !auth.currentUser) return;
-                const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
-                await updateDoc(sessionRef, {
+                const sessionRef = getSessionRef();
+                await mergeSessionPatch({
                     questions: parsed
                 });
                 showToast("題庫已導入成功！", true);
@@ -1473,9 +1501,9 @@
             }
 
             if (!db || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             try {
-                await updateDoc(sessionRef, {
+                await mergeSessionPatch({
                     questions: DEFAULT_QUESTIONS
                 });
                 showToast("已恢復預設測試題庫！", true);
@@ -1499,9 +1527,9 @@
             }
 
             if (!db || !currentSessionState || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             try {
-                await updateDoc(sessionRef, {
+                await mergeSessionPatch({
                     currentLevel: lvl,
                     currentQuestionNum: 1,
                     currentMainAnswer: null,
@@ -1529,9 +1557,9 @@
             }
 
             if (!db || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             try {
-                await updateDoc(sessionRef, {
+                await mergeSessionPatch({
                     currentQuestionNum: nextNum,
                     currentMainAnswer: null,
                     status: 'voting'
@@ -1562,7 +1590,7 @@
             }
 
             if (!db || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             showToast("驗證作答狀態...", false);
             
             try {
@@ -1583,9 +1611,11 @@
             const currentQId = `level${currentSessionState.currentLevel}-q${currentSessionState.currentQuestionNum}`;
             
             try {
-                await updateDoc(sessionRef, {
+                await mergeSessionPatch({
                     status: 'revealed',
-                    [`mainPlayerAnswers.${currentQId}`]: currentSessionState.currentMainAnswer
+                    mainPlayerAnswers: {
+                        [currentQId]: currentSessionState.currentMainAnswer
+                    }
                 });
                 showToast("已揭曉本題答案，全場計分完成！", true);
             } catch (err) {
@@ -1611,9 +1641,9 @@
             }
 
             if (!db || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             try {
-                await updateDoc(sessionRef, {
+                await mergeSessionPatch({
                     currentQuestionNum: nextNum,
                     currentMainAnswer: null,
                     status: 'voting'
@@ -1647,14 +1677,7 @@
 
         async function executeResetAllGame() {
             if (isSimulation) {
-                currentSessionState = {
-                    currentLevel: 1,
-                    currentQuestionNum: 1,
-                    status: 'voting',
-                    currentMainAnswer: null,
-                    mainPlayerAnswers: {},
-                    questions: DEFAULT_QUESTIONS
-                };
+                currentSessionState = createDefaultSessionState();
                 allParticipantsSnapshot = allParticipantsSnapshot.map(p => {
                     return Object.assign({}, p, { answers: {} });
                 });
@@ -1670,16 +1693,9 @@
             }
 
             if (!db || !auth || !auth.currentUser) return;
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const sessionRef = getSessionRef();
             try {
-                await setDoc(sessionRef, {
-                    currentLevel: 1,
-                    currentQuestionNum: 1,
-                    status: 'voting',
-                    currentMainAnswer: null,
-                    mainPlayerAnswers: {},
-                    questions: DEFAULT_QUESTIONS
-                });
+                await setDoc(sessionRef, createDefaultSessionState(), { merge: true });
 
                 const querySnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'participants'));
                 const batch = writeBatch(db);
