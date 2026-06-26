@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>餐會互動遊戲 - 煥周默契王 👑</title>
+    <!-- Tailwind CSS 引入 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter & 繁體中文美化 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome 圖標庫 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            background: radial-gradient(circle at center, #2e080c 0%, #110204 100%);
+            color: #f7fafc;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .gold-glow {
+            text-shadow: 0 0 15px rgba(212, 175, 55, 0.6);
+        }
+        .gold-border {
+            border-color: #d4af37;
+        }
+        .gold-bg {
+            background: linear-gradient(135deg, #f39c12, #d4af37);
+        }
+        .red-gradient {
+            background: linear-gradient(135deg, #c0392b, #962d22);
+        }
+        /* 滾動條美化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d4af37;
+            border-radius: 3px;
+        }
+        /* 載入動畫 */
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #d4af37;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* 頒獎台動畫效果 */
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .podium-1 { animation: bounce-slow 3s infinite ease-in-out; }
+        .podium-2 { animation: bounce-slow 3.4s infinite ease-in-out; }
+        .podium-3 { animation: bounce-slow 3.8s infinite ease-in-out; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-start p-4 md:p-8">
+
+    <!-- 全域通知訊息 (替代 alert) -->
+    <div id="toast" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-500 text-black font-bold px-6 py-3 rounded-full shadow-2xl flex items-center space-x-2 transition-all duration-300 opacity-0 pointer-events-none">
+        <span id="toast-icon"><i class="fas fa-info-circle"></i></span>
+        <span id="toast-text">提示訊息</span>
+    </div>
+
+    <!-- 客製化確認重設彈出視窗 (替代 confirm) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-stone-900 border-2 border-red-500/30 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
+            <div class="text-red-500 text-4xl"><i class="fas fa-exclamation-triangle animate-bounce"></i></div>
+            <h3 class="text-xl font-black text-white">確定要重置遊戲嗎？</h3>
+            <p class="text-stone-400 text-sm">這將會清除全場所有人的分數、答案與自訂題庫，此操作無法復原！</p>
+            <div class="flex gap-3 justify-center pt-2">
+                <button id="confirm-modal-yes" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-sm transition-colors">確定重設</button>
+                <button id="confirm-modal-no" class="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold rounded-lg text-sm transition-colors">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 雲端同步庫設定 Modal -->
+    <div id="db-config-modal" class="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-stone-900 border-2 border-amber-500/30 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div class="text-amber-400 text-3xl text-center"><i class="fas fa-database"></i> 跨裝置雲端同步設定</div>
+            <p class="text-stone-400 text-xs leading-relaxed">
+                若要讓<b>桌機、平板以及 80 位現場賓客手機</b>同步，請建立一個免費的 Firebase 專案，並將專案網頁 SDK 程式碼中的設定 (firebaseConfig JSON) 貼在下方。
+            </p>
+            <div class="space-y-1">
+                <label class="text-xs text-amber-400 font-bold">請貼上 firebaseConfig JSON 物件：</label>
+                <textarea id="db-config-textarea" rows="8" placeholder='{
+  "apiKey": "your-api-key",
+  "authDomain": "your-project.firebaseapp.com",
+  "projectId": "your-project-id",
+  "storageBucket": "your-project.appspot.com",
+  "messagingSenderId": "your-sender-id",
+  "appId": "your-app-id"
+}' class="w-full p-2 bg-stone-950 text-emerald-400 font-mono text-xs rounded border border-stone-800 focus:outline-none focus:border-amber-400"></textarea>
+            </div>
+            <div class="flex gap-3 justify-end pt-2">
+                <button onclick="saveCustomDbConfig()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold rounded-lg text-sm transition-colors">儲存並建立連線</button>
+                <button onclick="closeDbConfigModal()" class="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-lg text-sm transition-colors">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 背景紙花畫布 (最後前三名出爐時撒花) -->
+    <canvas id="confetti-canvas" class="fixed inset-0 pointer-events-none z-40 hidden"></canvas>
+
+    <!-- 頂部大標題 -->
+    <header class="text-center mb-6 max-w-2xl w-full">
+        <h1 class="text-3xl md:text-5xl font-extrabold text-amber-400 gold-glow tracking-wider flex items-center justify-center gap-3">
+            <i class="fas fa-crown"></i> 煥周默契王 👑
+        </h1>
+        <p class="text-gray-400 text-sm md:text-base mt-2">手機與大螢幕實時同步題庫，答題更直覺！</p>
+        <div id="sync-mode-indicator" class="inline-block mt-2 px-3 py-1 bg-emerald-950/80 text-emerald-400 border border-emerald-800 rounded-full text-xs font-bold">
+            <i class="fas fa-wifi"></i> 雲端同步模式載入中...
+        </div>
+    </header>
+
+    <!-- ================= 角色選取畫面 ================= -->
+    <div id="role-selection-view" class="w-full max-w-md bg-stone-900/90 border-2 border-amber-500/30 rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
+        <h2 class="text-xl font-bold text-center text-amber-300 mb-2 border-b border-stone-800 pb-3">請選擇您的角色類型</h2>
+        
+        <button onclick="selectRole('screen')" class="w-full py-4 px-6 bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-neutral-950 font-bold rounded-xl text-lg flex items-center justify-between shadow-lg transition-transform active:scale-95">
+            <span><i class="fas fa-tv mr-2"></i> 🖥️ 投影大螢幕 (現場主投影)</span>
+            <i class="fas fa-chevron-right"></i>
+        </button>
+
+        <button onclick="promptPasscode('admin')" class="w-full py-4 px-6 bg-stone-800 hover:bg-stone-700 text-amber-400 border border-amber-500/20 font-bold rounded-xl text-lg flex items-center justify-between shadow-lg transition-transform active:scale-95">
+            <span><i class="fas fa-user-cog mr-2"></i> 🎙️ 主持人控制台</span>
+            <i class="fas fa-chevron-right"></i>
+        </button>
+
+        <button onclick="promptPasscode('mainPlayer')" class="w-full py-4 px-6 bg-stone-800 hover:bg-stone-700 text-rose-400 border border-rose-500/20 font-bold rounded-xl text-lg flex items-center justify-between shadow-lg transition-transform active:scale-95">
+            <span><i class="fas fa-user-tie mr-2"></i> 👑 主答者手機端</span>
+            <i class="fas fa-chevron-right"></i>
+        </button>
+
+        <div class="border-t border-stone-800 my-2"></div>
+
+        <div class="flex flex-col gap-2">
+            <label class="text-sm text-amber-400/80 font-bold">🙋 參與者請輸入姓名/桌號加入：</label>
+            <input type="text" id="participant-name-input" placeholder="例如：第3桌-雅婷" class="w-full p-3 rounded-lg bg-neutral-950 text-white border border-stone-700 focus:outline-none focus:border-amber-400 text-center text-lg">
+            <button onclick="joinAsParticipant()" class="w-full py-4 bg-gradient-to-r from-rose-700 to-red-600 hover:from-rose-600 hover:to-red-500 text-white font-bold rounded-xl text-lg mt-1 shadow-lg transition-transform active:scale-95">
+                點擊加入競賽答題 <i class="fas fa-paper-plane ml-1"></i>
+            </button>
+        </div>
+
+        <div class="border-t border-stone-800 my-1"></div>
+        
+        <!-- 雲端設定入口按鈕 -->
+        <button onclick="openDbConfigModal()" class="w-full py-2.5 bg-stone-950 hover:bg-stone-900 border border-amber-500/20 text-amber-400 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all">
+            <i class="fas fa-database text-amber-500"></i> ⚙️ 設定專屬雲端連線 (跨裝置多機同步必備)
+        </button>
+    </div>
+
+    <!-- ================= 1. 🖥️ 投影大螢幕 ================= -->
+    <div id="view-screen" class="hidden w-full max-w-6xl flex flex-col lg:flex-row gap-6">
+        
+        <!-- 左側：當前題目狀態與作答人數統計 -->
+        <div class="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-6 flex flex-col justify-between min-h-[550px]">
+            <div>
+                <div class="flex justify-between items-center border-b border-stone-800 pb-4 mb-6">
+                    <span id="screen-level-badge" class="px-4 py-2 bg-rose-900/60 text-rose-300 border border-rose-700 rounded-full font-bold text-sm tracking-wide">
+                        加載中...
+                    </span>
+                    <span class="text-stone-400 text-sm">請看前方 Canva 簡報</span>
+                </div>
+
+                <div class="text-center my-4">
+                    <p id="screen-question-num" class="text-3xl font-black text-amber-400 gold-glow">第 - 題</p>
+                    <h2 id="screen-question-text" class="text-2xl md:text-3xl font-bold text-white mt-4 px-4 leading-relaxed">題目載入中...</h2>
+                </div>
+
+                <div id="screen-options-display" class="grid grid-cols-1 md:grid-cols-2 gap-3 my-6 px-4">
+                    <!-- 動態渲染選項 -->
+                </div>
+
+                <div class="bg-neutral-950/80 rounded-xl p-4 border border-stone-800 mb-6 max-w-md mx-auto">
+                    <p class="text-stone-400 text-center text-xs font-bold tracking-wider uppercase mb-2">
+                        <i class="fas fa-users"></i> 全場作答進度
+                    </p>
+                    <div class="flex justify-around items-center">
+                        <div class="text-center">
+                            <span class="text-stone-400 text-[11px] block">主答者狀態</span>
+                            <span id="screen-main-status" class="text-lg font-bold text-red-500 mt-1 block">未答 <i class="fas fa-clock"></i></span>
+                        </div>
+                        <div class="h-8 w-px bg-stone-800"></div>
+                        <div class="text-center">
+                            <span class="text-stone-400 text-[11px] block">參與者已答</span>
+                            <span id="screen-sub-count" class="text-2xl font-black text-amber-400 mt-1 block">0 <span class="text-xs font-normal text-stone-500">人</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="screen-reveal-panel" class="hidden flex flex-col items-center justify-center p-5 bg-amber-500/10 border border-amber-500/30 rounded-xl max-w-md mx-auto">
+                    <p class="text-amber-400 font-bold text-md mb-2"><i class="fas fa-bullhorn"></i> 主答者鎖定的真實答案</p>
+                    <span id="screen-correct-answer" class="text-4xl font-black text-white gold-glow">?</span>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <p class="text-stone-500 text-xs font-bold mb-2">誰在作答中 (亮起表示已送出)：</p>
+                <div id="screen-participants-dots" class="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto p-2 bg-black/40 rounded-lg">
+                    <!-- 動態加入小標籤 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：即時排行榜 -->
+        <div class="w-full lg:w-[420px] bg-stone-900/80 border border-stone-800 rounded-2xl p-6 flex flex-col">
+            <h3 class="text-2xl font-black text-amber-300 gold-glow text-center mb-6 flex items-center justify-center gap-2">
+                <i class="fas fa-trophy text-amber-400"></i> 最懂主答者排行榜
+            </h3>
+
+            <div class="flex justify-center items-end gap-2 h-[180px] mb-6 border-b border-stone-800 pb-4">
+                <!-- 第二名 -->
+                <div class="podium-2 flex flex-col items-center w-24">
+                    <div id="rank-2-name" class="text-stone-300 text-xs font-bold text-center truncate w-full mb-1">-</div>
+                    <div class="gold-bg text-black text-[10px] font-black px-2 py-0.5 rounded-full mb-1">Score: <span id="rank-2-score">0</span></div>
+                    <div class="w-full h-[60px] bg-slate-400/30 rounded-t-lg flex items-center justify-center relative border-t-2 border-slate-300 shadow-md">
+                        <span class="text-3xl font-black text-slate-300">2</span>
+                        <i class="fas fa-award absolute -top-4 text-slate-300 text-xl"></i>
+                    </div>
+                </div>
+
+                <!-- 第一名 -->
+                <div class="podium-1 flex flex-col items-center w-28">
+                    <div id="rank-1-name" class="text-amber-300 text-sm font-black text-center truncate w-full mb-1">-</div>
+                    <div class="gold-bg text-black text-xs font-black px-3 py-0.5 rounded-full mb-1">Score: <span id="rank-1-score">0</span></div>
+                    <div class="w-full h-[90px] bg-yellow-500/30 rounded-t-lg flex items-center justify-center relative border-t-2 border-yellow-400 shadow-lg">
+                        <span class="text-4xl font-black text-yellow-400">1</span>
+                        <i class="fas fa-crown absolute -top-5 text-amber-400 text-2xl animate-bounce"></i>
+                    </div>
+                </div>
+
+                <!-- 第三名 -->
+                <div class="podium-3 flex flex-col items-center w-24">
+                    <div id="rank-3-name" class="text-orange-300 text-xs font-bold text-center truncate w-full mb-1">-</div>
+                    <div class="gold-bg text-black text-[10px] font-black px-2 py-0.5 rounded-full mb-1">Score: <span id="rank-3-score">0</span></div>
+                    <div class="w-full h-[45px] bg-amber-700/30 rounded-t-lg flex items-center justify-center relative border-t-2 border-amber-600 shadow-md">
+                        <span class="text-3xl font-black text-amber-600">3</span>
+                        <i class="fas fa-award absolute -top-4 text-amber-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto max-h-[220px] space-y-2 pr-1" id="screen-leaderboard-list">
+                <div class="text-center text-stone-500 text-sm py-4">等待遊戲開始...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 2. 🎙️ 主持人控制台 ================= -->
+    <div id="view-admin" class="hidden w-full max-w-2xl bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+        <div class="flex justify-between items-center border-b border-stone-800 pb-4">
+            <h2 class="text-xl font-bold text-amber-400"><i class="fas fa-user-cog"></i> 主持人總控制台</h2>
+            <button onclick="exitToRoleSelection()" class="text-xs px-3 py-1.5 bg-stone-800 hover:bg-stone-700 rounded text-stone-400">登出角色</button>
+        </div>
+
+        <div class="bg-neutral-950 p-4 rounded-xl border border-stone-800 flex justify-between items-center">
+            <div>
+                <span class="text-stone-400 text-xs block">👑 主答者作答狀態</span>
+                <span id="admin-main-player-status" class="text-sm font-bold text-rose-500 mt-1 block">載入中...</span>
+            </div>
+            <div class="text-right">
+                <span class="text-stone-400 text-xs block">🙋 參與者已答比例</span>
+                <span id="admin-participants-answered-count" class="text-sm font-bold text-amber-400 mt-1 block">0 / 0 人</span>
+            </div>
+        </div>
+
+        <div class="bg-neutral-950 p-4 rounded-xl border border-stone-800 space-y-4">
+            <h3 class="font-bold text-stone-300">🎮 第一步：切換關卡與題號</h3>
+            
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="setGameLevel(1)" id="admin-lvl-btn-1" class="py-2 px-3 rounded-lg border font-bold text-xs bg-rose-950/40 border-rose-800 text-rose-300">
+                    初階題 (AB)
+                </button>
+                <button onclick="setGameLevel(2)" id="admin-lvl-btn-2" class="py-2 px-3 rounded-lg border font-bold text-xs bg-neutral-900 border-stone-800 text-stone-400">
+                    進階題 (ABC)
+                </button>
+                <button onclick="setGameLevel(3)" id="admin-lvl-btn-3" class="py-2 px-3 rounded-lg border font-bold text-xs bg-neutral-900 border-stone-800 text-stone-400">
+                    人生難題 (ABCD)
+                </button>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+                <span class="text-stone-400 font-bold">當前題號：</span>
+                <div class="flex items-center gap-3">
+                    <button onclick="adjustQuestionNum(-1)" class="w-10 h-10 rounded-lg bg-stone-800 text-white font-bold flex items-center justify-center hover:bg-stone-700">-</button>
+                    <span id="admin-question-num" class="text-2xl font-black text-amber-400">1</span>
+                    <button onclick="adjustQuestionNum(1)" class="w-10 h-10 rounded-lg bg-stone-800 text-white font-bold flex items-center justify-center hover:bg-stone-700">+</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-neutral-950 p-4 rounded-xl border border-amber-500/30 space-y-3">
+            <h3 class="font-black text-amber-300 flex items-center gap-2">
+                <i class="fas fa-edit"></i> 📝 當前題目與選項實時修改器
+            </h3>
+            <p class="text-stone-500 text-[11px]">直接在此輸入，全場手機選項文字會實時同步！</p>
+            
+            <div class="space-y-2">
+                <div>
+                    <label class="text-xs text-stone-400 font-bold">題目敘述：</label>
+                    <input type="text" id="admin-edit-q-text" placeholder="例如：主答者最常喝的飲料是？" class="w-full mt-1 p-2 bg-stone-900 text-white border border-stone-800 rounded text-sm focus:border-amber-400 focus:outline-none">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-xs text-stone-400">選項 A：</label>
+                        <input type="text" id="admin-edit-opt-a" placeholder="選項 A 內容" class="w-full mt-1 p-2 bg-stone-900 text-white border border-stone-800 rounded text-sm focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-stone-400">選項 B：</label>
+                        <input type="text" id="admin-edit-opt-b" placeholder="選項 B 內容" class="w-full mt-1 p-2 bg-stone-900 text-white border border-stone-800 rounded text-sm focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2" id="admin-edit-extra-opts">
+                    <div>
+                        <label class="text-xs text-stone-400">選項 C (進階/人生難題)：</label>
+                        <input type="text" id="admin-edit-opt-c" placeholder="選項 C 內容" class="w-full mt-1 p-2 bg-stone-900 text-white border border-stone-800 rounded text-sm focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-stone-400">選項 D (僅限人生難題)：</label>
+                        <input type="text" id="admin-edit-opt-d" placeholder="選項 D 內容" class="w-full mt-1 p-2 bg-stone-900 text-white border border-stone-800 rounded text-sm focus:outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="saveCurrentQuestionEdit()" class="w-full py-2 bg-gradient-to-r from-amber-600 to-yellow-500 text-stone-950 font-bold rounded-lg text-sm hover:from-amber-500 hover:to-yellow-400 transition-colors">
+                <i class="fas fa-save mr-1"></i> 儲存並實時發佈此題內容
+            </button>
+        </div>
+
+        <div class="space-y-3">
+            <h3 class="font-bold text-stone-300">📢 流程操作</h3>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="triggerRevealAnswer()" class="py-4 bg-gradient-to-r from-amber-500 to-yellow-400 text-neutral-950 font-black rounded-xl text-md flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95">
+                    <span>公佈正確答案 💥</span>
+                    <span class="text-[10px] font-normal opacity-80">(計算本題積分)</span>
+                </button>
+                <button onclick="nextQuestionFlow()" class="py-4 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-neutral-950 font-black rounded-xl text-md flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95">
+                    <span>切換至下一題 ➡️</span>
+                    <span class="text-[10px] font-normal opacity-80">(保留積分，清除本題答案)</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="border-t border-stone-800 pt-4 space-y-2">
+            <button onclick="toggleJsonPanel()" class="text-xs text-amber-400 hover:underline flex items-center gap-1">
+                <i class="fas fa-cloud-upload-alt"></i> 顯示/隱藏 大批 JSON 題庫匯入編輯區
+            </button>
+            <div id="admin-json-panel" class="hidden bg-stone-950 p-4 rounded-xl border border-stone-800 space-y-3">
+                <p class="text-xs text-stone-400">您可以直接在此貼上事先編寫好的題庫 JSON。格式必須如下：</p>
+                <textarea id="admin-json-textarea" rows="6" class="w-full p-2 bg-stone-900 text-emerald-400 font-mono text-xs rounded border border-stone-800 focus:outline-none"></textarea>
+                <div class="flex gap-2">
+                    <button onclick="applyJsonImport()" class="px-3 py-1.5 bg-amber-600 text-stone-950 font-bold text-xs rounded hover:bg-amber-500">套用此 JSON 題庫</button>
+                    <button onclick="resetToDefaultQuestions()" class="px-3 py-1.5 bg-stone-800 text-stone-300 font-bold text-xs rounded hover:bg-stone-700">恢復預設測試題庫</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="border-t border-stone-800 pt-4 flex justify-between items-center">
+            <div class="text-xs text-stone-500">警告：重設將清除全場所有人的分數！</div>
+            <button onclick="confirmResetAllGame()" class="px-4 py-2 bg-red-950 text-red-400 border border-red-900 rounded-lg text-sm hover:bg-red-900 hover:text-white font-bold transition-all">
+                ⚠️ 清空重來
+            </button>
+        </div>
+    </div>
+
+    <!-- ================= 3. 👑 主答者手機端 ================= -->
+    <div id="view-mainPlayer" class="hidden w-full max-w-md bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6 text-center">
+        <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+            <span class="px-3 py-1 bg-red-950/80 text-rose-300 border border-red-800 rounded-full text-xs font-bold">
+                👑 主答者模式
+            </span>
+            <button onclick="exitToRoleSelection()" class="text-xs text-stone-500">退出角色</button>
+        </div>
+
+        <div class="my-2">
+            <p id="main-player-badge" class="text-stone-400 text-xs font-bold">目前關卡題型</p>
+            <h2 id="main-player-level-text" class="text-lg font-bold text-amber-300 mt-1">-</h2>
+            <div id="main-player-q-num" class="text-3xl font-black text-rose-500 my-1">第 - 題</div>
+            <h1 id="main-player-q-text" class="text-xl font-bold text-white px-2 mt-3 leading-relaxed">題目載入中...</h1>
+        </div>
+
+        <p class="text-stone-400 text-xs">請選出您針對此題的「真實答案」：</p>
+
+        <div class="flex flex-col gap-3 my-2" id="main-player-options-grid">
+            <!-- 動態產生按鈕 -->
+        </div>
+
+        <div id="main-player-status" class="text-stone-500 text-xs bg-neutral-950/80 p-3 rounded-lg border border-stone-800">
+            請點選按鈕，鎖定您的正確答案
+        </div>
+    </div>
+
+    <!-- ================= 4. 🙋 參與者手機端 ================= -->
+    <div id="view-participant" class="hidden w-full max-w-md bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6 text-center">
+        <!-- 參與者頭部資訊 -->
+        <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+            <div class="flex items-center gap-2">
+                <span id="participant-identity-badge" class="px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-bold">
+                    🙋 載入中...
+                </span>
+            </div>
+            <div class="text-right flex flex-col items-end">
+                <span class="text-stone-500 text-[10px]">累計積分 / 答對題數</span>
+                <span class="font-black text-lg text-amber-400"><span id="participant-score-display">0 pt</span></span>
+                <span id="participant-correct-display" class="text-emerald-400 font-bold text-xs block">答對: 0 題</span>
+            </div>
+        </div>
+
+        <div>
+            <span id="participant-level-text" class="text-xs px-3 py-1 bg-stone-800 text-stone-300 rounded-full font-bold">
+                初階題
+            </span>
+            <div id="participant-q-num" class="text-3xl font-black text-white mt-2">第 - 題</div>
+            <h1 id="participant-q-text" class="text-xl font-bold text-amber-200 px-2 mt-3 leading-relaxed">題目載入中...</h1>
+        </div>
+
+        <p class="text-stone-400 text-xs px-4">
+            猜猜看，主答者在此題會選擇哪一個答案？
+        </p>
+
+        <div class="flex flex-col gap-3 my-2" id="participant-options-grid">
+            <!-- 動態產生按鈕 -->
+        </div>
+
+        <div id="participant-status-card" class="bg-neutral-950/80 p-3 rounded-xl border border-stone-800 text-stone-500 text-xs">
+            請點擊選項進行預測！
+        </div>
+    </div>
+
+    <!-- Firebase SDK & Multi-Tab Synchronization -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        let app, db, auth;
+        let localUser = null;
+        let activeRole = null; 
+        let unsubscribeSession = null;
+        let unsubscribeParticipants = null;
+
+        // 當前遊戲狀態與參與者快照
+        let currentSessionState = null;
+        let allParticipantsSnapshot = [];
+        let isSimulation = false; // 是否進入本地單機廣播備份
+
+        const ADMIN_PASSCODE = "1234"; 
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'banquet-who-knows-me';
+
+        // =========================================================================
+        // [手動設定雲端資料庫區]：如果您不想每次都手動貼上 Firebase 金鑰，
+        // 您可以直接把從 Firebase Console 得到的 Config 物件，貼到下方 const apiKey = "" 那個 {} 內！
+        // 系統會自動讀取。如果在此處留空，系統也支援直接在網頁畫面上填寫貼上，非常彈性！
+        // =========================================================================
+        const hardcodedFirebaseConfig = {
+			apiKey: "AIzaSyC0JFiyO7riERQIfbP8LFqWmLxslLQzM2M",
+  authDomain: "lingame-81bd2.firebaseapp.com",
+  projectId: "lingame-81bd2",
+  storageBucket: "lingame-81bd2.firebasestorage.app",
+  messagingSenderId: "269643126711",
+  appId: "1:269643126711:web:a1ab0e74c14c229268ba32",
+  measurementId: "G-2VHGQJH32K"
+			
+        };
+
+        // 優先讀取雲端配置：1. 注入環境 2. 手機儲存 3. 上方寫死
+        function getActiveFirebaseConfig() {
+            // 優先：檢測環境注入
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                const envConfig = JSON.parse(__firebase_config);
+                if (envConfig && envConfig.apiKey) return envConfig;
+            }
+
+            // 次之：手機或設備 localStorage 中的客製化貼上
+            const stored = localStorage.getItem('custom_firebase_config');
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    if (parsed && parsed.apiKey) return parsed;
+                } catch(e) {}
+            }
+
+            // 最後：讀取本程式寫死的設定
+            if (hardcodedFirebaseConfig && hardcodedFirebaseConfig.apiKey) {
+                return hardcodedFirebaseConfig;
+            }
+
+            return null;
+        }
+
+        // 本地預生成 UUID
+        let fallbackUid = localStorage.getItem('fallback_uid');
+        if (!fallbackUid) {
+            fallbackUid = 'guest_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+            localStorage.setItem('fallback_uid', fallbackUid);
+        }
+
+        function getCurrentUid() {
+            if (isSimulation) {
+                return localStorage.getItem('fallback_uid') || 'guest_sim';
+            }
+            return (localUser && localUser.uid) ? localUser.uid : (localStorage.getItem('fallback_uid') || 'guest_unknown');
+        }
+
+        const DEFAULT_QUESTIONS = [
+            { level: 1, num: 1, text: "主答者最常喝的提神飲料是？", options: ["冰美式咖啡", "珍珠奶茶"] },
+            { level: 1, num: 2, text: "如果突然下暴雨，主答者最可能採取的行動？", options: ["立刻買一把新傘", "在原地等雨變小"] },
+            { level: 1, num: 3, text: "主答者休假起床後的第一個習慣是？", options: ["滑手機看社群", "下床刷牙洗臉"] },
+            { level: 2, num: 1, text: "如果中了發票一千萬元，主答者最想做什麼？", options: ["全部存起來買房房貸", "立刻訂頭等艙環遊世界", "大手筆請全現場吃飯！"] },
+            { level: 2, num: 2, text: "主答者在KTV唱歌時，通常屬於哪一種類型？", options: ["當仁不讓的實力派歌王", "在角落默默吃拼盤與喝酒", "負責點歌與炒熱全場氣氛者"] },
+            { level: 3, num: 1, text: "當面臨極度焦慮的人生難題時，主答者會？", options: ["去廟裡求神問卜/算命", "找最知心的好朋友訴苦", "獨自一人鎖在房間發呆", "瘋狂運動或暴飲暴食發洩"] },
+            { level: 3, num: 2, text: "若能隨機擁有一種超能力，主答者最渴望？", options: ["穿越時空回到過去", "讀心術看透身邊所有人", "瞬間移動省去通勤時間", "隱形能力隨心所欲探險"] }
+        ];
+
+        // 跨頁面通訊通道 (僅適用於單一裝置多分頁)
+        const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('banquet_game_sim_channel') : null;
+
+        function broadcastSimUpdate(type, data) {
+            if (bc && isSimulation) {
+                bc.postMessage({ type, data });
+            }
+        }
+
+        // 安全渲染 DOM 元件
+        function safeSetText(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val;
+        }
+
+        function safeSetHTML(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = val;
+        }
+
+        function safeClassRemove(id, cls) {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove(cls);
+        }
+
+        function safeClassAdd(id, cls) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add(cls);
+        }
+
+        if (bc) {
+            bc.onmessage = (event) => {
+                if (!isSimulation) return;
+                const { type, data } = event.data;
+                if (type === 'SESSION_UPDATE') {
+                    currentSessionState = data;
+                    handleSessionStateChange(currentSessionState);
+                } else if (type === 'PARTICIPANTS_UPDATE') {
+                    allParticipantsSnapshot = data;
+                    renderLeaderboardAndProgress();
+                } else if (type === 'REQUEST_SYNC') {
+                    if (activeRole === 'screen' || activeRole === 'admin') {
+                        broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                        broadcastSimUpdate('PARTICIPANTS_UPDATE', allParticipantsSnapshot);
+                    }
+                }
+            };
+        }
+
+        // =========================================================================
+        // ⚙️ 雲端設定面板交互控制
+        // =========================================================================
+        window.openDbConfigModal = function() {
+            playSound('click');
+            const modal = document.getElementById('db-config-modal');
+            if (modal) modal.classList.remove('hidden');
+
+            const stored = localStorage.getItem('custom_firebase_config');
+            const textarea = document.getElementById('db-config-textarea');
+            if (textarea) {
+                textarea.value = stored ? stored : "";
+            }
+        };
+
+        window.closeDbConfigModal = function() {
+            playSound('click');
+            const modal = document.getElementById('db-config-modal');
+            if (modal) modal.classList.add('hidden');
+        };
+
+        window.saveCustomDbConfig = function() {
+            playSound('click');
+            const txt = document.getElementById('db-config-textarea').value.trim();
+            if (!txt) {
+                localStorage.removeItem('custom_firebase_config');
+                showToast("已清空客製化設定，系統重設中...", true);
+                setTimeout(() => location.reload(), 1000);
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(txt);
+                if (!parsed || !parsed.apiKey) {
+                    showToast("貼上的 JSON 格式不完整，請確認是否包含 apiKey！");
+                    return;
+                }
+                localStorage.setItem('custom_firebase_config', JSON.stringify(parsed));
+                showToast("雲端連線設定儲存成功！網頁即將重啟連線...", true);
+                setTimeout(() => location.reload(), 1500);
+            } catch(e) {
+                showToast("語法解析錯誤！請確保貼上的是標準的 JSON 格式物件。");
+            }
+        };
+
+        function initLocalSimulation() {
+            isSimulation = true;
+            const indicator = document.getElementById('sync-mode-indicator');
+            if (indicator) {
+                indicator.innerHTML = '<span class="text-amber-400 font-bold"><i class="fas fa-plug text-xs"></i> 單機測試廣播中 (若需多機聯動請點下方設定雲端)</span>';
+                indicator.classList.remove('bg-emerald-950/80', 'text-emerald-400');
+                indicator.classList.add('bg-amber-950/80', 'text-amber-400', 'border-amber-800');
+            }
+
+            currentSessionState = {
+                currentLevel: 1,
+                currentQuestionNum: 1,
+                status: 'voting',
+                currentMainAnswer: null,
+                mainPlayerAnswers: {},
+                questions: DEFAULT_QUESTIONS
+            };
+
+            const savedSession = localStorage.getItem('sim_session_state');
+            if (savedSession) {
+                try { currentSessionState = JSON.parse(savedSession); } catch(e){}
+            }
+            const savedParticipants = localStorage.getItem('sim_participants_snapshot');
+            if (savedParticipants) {
+                try { allParticipantsSnapshot = JSON.parse(savedParticipants); } catch(e){}
+            }
+
+            broadcastSimUpdate('REQUEST_SYNC', null);
+
+            setTimeout(() => {
+                handleSessionStateChange(currentSessionState);
+                renderLeaderboardAndProgress();
+            }, 100);
+        }
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.1);
+                } else if (type === 'correct') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
+                    osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); 
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                } else if (type === 'reveal') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.3);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                } else if (type === 'join') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                }
+            } catch (e) {
+                console.log("Audio gestured blocked");
+            }
+        }
+
+        function showToast(message, isSuccess = false) {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toast-text');
+            const toastIcon = document.getElementById('toast-icon');
+
+            if (!toast || !toastText || !toastIcon) return;
+
+            toastText.innerText = message;
+            if (isSuccess) {
+                toast.classList.remove('bg-yellow-500', 'text-black');
+                toast.classList.add('bg-green-600', 'text-white');
+                toastIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
+            } else {
+                toast.classList.remove('bg-green-600', 'text-white');
+                toast.classList.add('bg-yellow-500', 'text-black');
+                toastIcon.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+            }
+
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            toast.classList.add('opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        async function initFirebase() {
+            try {
+                const config = getActiveFirebaseConfig();
+                if (!config || !config.apiKey) {
+                    console.log("No valid Firebase Config found, fallback to local simulated Broadcast sync.");
+                    initLocalSimulation();
+                    return;
+                }
+
+                app = initializeApp(config);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                };
+                await initAuth();
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        localUser = user;
+                        console.log("Authenticated UID:", user.uid);
+                        const indicator = document.getElementById('sync-mode-indicator');
+                        if (indicator) {
+                            indicator.innerHTML = '<span class="text-emerald-400 font-bold"><i class="fas fa-wifi"></i> 雲端即時連動中 (Firebase)</span>';
+                        }
+                        const savedName = localStorage.getItem('guest_name');
+                        const inputField = document.getElementById('participant-name-input');
+                        if (savedName && inputField) {
+                            inputField.value = savedName;
+                        }
+                        if (activeRole) {
+                            startRealtimeSync();
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase init failed, fallback to local sync:", error);
+                initLocalSimulation();
+            }
+        }
+
+        function startRealtimeSync() {
+            if (isSimulation) {
+                broadcastSimUpdate('REQUEST_SYNC', null);
+                handleSessionStateChange(currentSessionState);
+                renderLeaderboardAndProgress();
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) {
+                setTimeout(startRealtimeSync, 200);
+                return;
+            }
+
+            if (unsubscribeSession) {
+                unsubscribeSession();
+                unsubscribeSession = null;
+            }
+            if (unsubscribeParticipants) {
+                unsubscribeParticipants();
+                unsubscribeParticipants = null;
+            }
+
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            unsubscribeSession = onSnapshot(sessionRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    currentSessionState = docSnap.data();
+                    handleSessionStateChange(currentSessionState);
+                } else {
+                    initializeGameSession();
+                }
+            }, (error) => {
+                console.error("Session sync failed:", error);
+            });
+
+            const participantsRef = collection(db, 'artifacts', appId, 'public', 'data', 'participants');
+            unsubscribeParticipants = onSnapshot(participantsRef, (querySnap) => {
+                allParticipantsSnapshot = [];
+                querySnap.forEach((doc) => {
+                    allParticipantsSnapshot.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+                renderLeaderboardAndProgress();
+            }, (error) => {
+                console.error("Participants sync failed:", error);
+            });
+        }
+
+        async function initializeGameSession() {
+            if (isSimulation) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            const defaultState = {
+                currentLevel: 1,
+                currentQuestionNum: 1,
+                status: 'voting',
+                currentMainAnswer: null,
+                mainPlayerAnswers: {},
+                questions: DEFAULT_QUESTIONS
+            };
+            try {
+                await setDoc(sessionRef, defaultState);
+            } catch (err) {
+                console.error("Initialize session failed:", err);
+            }
+        }
+
+        function getActiveQuestion(state) {
+            if (!state) return { level: 1, num: 1, text: "加載中...", options: ["A", "B"] };
+            const lvl = state.currentLevel || 1;
+            const qNum = state.currentQuestionNum || 1;
+            const questionsList = state.questions || DEFAULT_QUESTIONS;
+            
+            const found = questionsList.find(q => q.level === lvl && q.num === qNum);
+            if (found) {
+                return found;
+            }
+            const letters = getOptionsForLevel(lvl);
+            return {
+                level: lvl,
+                num: qNum,
+                text: "請配合 Canva 簡報第 " + qNum + " 題作答",
+                options: letters.map(function(l) { return "選項 " + l; })
+            };
+        }
+
+        function handleSessionStateChange(state) {
+            if (!state) return;
+            const activeQ = getActiveQuestion(state);
+            
+            // 🖥️ 投影大螢幕
+            if (activeRole === 'screen') {
+                updateScreenView(state, activeQ);
+            }
+            
+            // 👑 主答者手機端
+            if (activeRole === 'mainPlayer') {
+                updateMainPlayerView(state, activeQ);
+            }
+
+            // 🙋 參與者手機端
+            if (activeRole === 'participant') {
+                updateParticipantView(state, activeQ);
+            }
+
+            // 🎙️ 主持人控制台
+            if (activeRole === 'admin') {
+                safeSetText('admin-question-num', state.currentQuestionNum);
+                
+                // 遮罩防劇透的主答狀態
+                const mainStatusEl = document.getElementById('admin-main-player-status');
+                if (mainStatusEl) {
+                    if (state.currentMainAnswer) {
+                        if (state.status === 'revealed') {
+                            mainStatusEl.innerHTML = `<span class="text-emerald-400 font-bold"><i class="fas fa-check-circle"></i> 已揭曉答案 [ ${state.currentMainAnswer} ]</span>`;
+                        } else {
+                            mainStatusEl.innerHTML = `<span class="text-emerald-400 font-bold animate-pulse"><i class="fas fa-lock"></i> 主答者已鎖定答案 (未公佈)</span>`;
+                        }
+                    } else {
+                        mainStatusEl.innerHTML = `<span class="text-rose-500 animate-pulse font-bold"><i class="fas fa-hourglass-half"></i> 思考中 / 尚未選答</span>`;
+                    }
+                }
+
+                // 參與者已答比例
+                const currentQId = `level${state.currentLevel}-q${state.currentQuestionNum}`;
+                let answerCount = 0;
+                allParticipantsSnapshot.forEach(p => {
+                    if (p.answers && p.answers[currentQId]) answerCount++;
+                });
+                safeSetText('admin-participants-answered-count', `${answerCount} / ${allParticipantsSnapshot.length} 人`);
+
+                // 同步題目文字輸入框
+                const editQText = document.getElementById('admin-edit-q-text');
+                const editOptA = document.getElementById('admin-edit-opt-a');
+                const editOptB = document.getElementById('admin-edit-opt-b');
+                const editOptC = document.getElementById('admin-edit-opt-c');
+                const editOptD = document.getElementById('admin-edit-opt-d');
+
+                if (document.activeElement !== editQText && editQText) editQText.value = activeQ.text || "";
+                if (document.activeElement !== editOptA && editOptA) editOptA.value = activeQ.options[0] || "";
+                if (document.activeElement !== editOptB && editOptB) editOptB.value = activeQ.options[1] || "";
+                if (document.activeElement !== editOptC && editOptC) editOptC.value = activeQ.options[2] || "";
+                if (document.activeElement !== editOptD && editOptD) editOptD.value = activeQ.options[3] || "";
+
+                const extraOptsDiv = document.getElementById('admin-edit-extra-opts');
+                if (extraOptsDiv) {
+                    if (state.currentLevel === 1) {
+                        extraOptsDiv.classList.add('hidden');
+                    } else {
+                        extraOptsDiv.classList.remove('hidden');
+                    }
+                }
+
+                const jsonTextarea = document.getElementById('admin-json-textarea');
+                if (document.activeElement !== jsonTextarea && jsonTextarea) {
+                    jsonTextarea.value = JSON.stringify(state.questions || DEFAULT_QUESTIONS, null, 2);
+                }
+
+                for (let i = 1; i <= 3; i++) {
+                    const btn = document.getElementById(`admin-lvl-btn-${i}`);
+                    if (btn) {
+                        if (state.currentLevel === i) {
+                            btn.className = "py-2 px-3 rounded-lg border font-bold text-xs bg-rose-950/60 border-rose-800 text-rose-300";
+                        } else {
+                            btn.className = "py-2 px-3 rounded-lg border font-bold text-xs bg-neutral-900 border-stone-800 text-stone-400";
+                        }
+                    }
+                }
+            }
+        }
+
+        function getOptionsForLevel(level) {
+            if (level === 1) return ['A', 'B'];
+            if (level === 2) return ['A', 'B', 'C'];
+            return ['A', 'B', 'C', 'D'];
+        }
+
+        function calculateParticipantScore(participantAnswers, mainPlayerAnswers) {
+            let total = 0;
+            if (!participantAnswers || !mainPlayerAnswers) return 0;
+            
+            for (const [qKey, ans] of Object.entries(participantAnswers)) {
+                if (mainPlayerAnswers[qKey] && mainPlayerAnswers[qKey] === ans) {
+                    if (qKey.startsWith('level1')) total += 10;
+                    else if (qKey.startsWith('level2')) total += 20;
+                    else if (qKey.startsWith('level3')) total += 30;
+                }
+            }
+            return total;
+        }
+
+        function updateScreenView(state, activeQ) {
+            const levelNames = ["初階題 (AB 二選一)", "進階題 (ABC 三選一)", "人生難題 (ABCD 四選一)"];
+            safeSetText('screen-level-badge', `目前階段：${levelNames[state.currentLevel - 1]}`);
+            safeSetText('screen-question-num', `第 ${state.currentQuestionNum} 題`);
+            safeSetText('screen-question-text', activeQ.text || "題目載入中...");
+
+            const optionsDisplay = document.getElementById('screen-options-display');
+            if (optionsDisplay) {
+                const labels = ['A', 'B', 'C', 'D'];
+                optionsDisplay.innerHTML = activeQ.options.map((opt, idx) => {
+                    const label = labels[idx];
+                    return `
+                        <div class="bg-neutral-950/90 border border-amber-500/20 rounded-xl p-3 text-left">
+                            <span class="font-extrabold text-amber-400 mr-2">${label}.</span>
+                            <span class="text-stone-200 font-medium">${opt}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const mainStatusEl = document.getElementById('screen-main-status');
+            if (mainStatusEl) {
+                if (state.currentMainAnswer) {
+                    mainStatusEl.innerHTML = '<span class="text-emerald-400">已鎖定真實答案 <i class="fas fa-check-circle"></i></span>';
+                } else {
+                    mainStatusEl.innerHTML = '<span class="text-rose-500 animate-pulse">思考中 <i class="fas fa-hourglass-half"></i></span>';
+                }
+            }
+
+            const revealPanel = document.getElementById('screen-reveal-panel');
+            const correctAnswerEl = document.getElementById('screen-correct-answer');
+            if (state.status === 'revealed') {
+                if (revealPanel) revealPanel.classList.remove('hidden');
+                
+                if (correctAnswerEl) {
+                    const labels = ['A', 'B', 'C', 'D'];
+                    const mainAnsLetter = state.currentMainAnswer || "";
+                    const mainAnsIdx = labels.indexOf(mainAnsLetter);
+                    const mainAnsText = (mainAnsIdx !== -1 && activeQ.options[mainAnsIdx]) ? activeQ.options[mainAnsIdx] : "";
+
+                    correctAnswerEl.innerHTML = `
+                        <div class="text-center">
+                            <span class="text-amber-400 font-extrabold text-5xl mr-2">${mainAnsLetter}</span>
+                            <p class="text-xl text-stone-200 mt-2 font-bold">${mainAnsText}</p>
+                        </div>
+                    `;
+                }
+                playSound('reveal');
+                triggerConfetti();
+            } else {
+                if (revealPanel) revealPanel.classList.add('hidden');
+            }
+        }
+
+        function renderLeaderboardAndProgress() {
+            if (!currentSessionState) return;
+
+            const currentQId = `level${currentSessionState.currentLevel}-q${currentSessionState.currentQuestionNum}`;
+            const mainAnswers = currentSessionState.mainPlayerAnswers || {};
+            const myUid = getCurrentUid();
+
+            const rankedParticipants = allParticipantsSnapshot.map(p => {
+                const score = calculateParticipantScore(p.answers, mainAnswers);
+                return Object.assign({}, p, { calculatedScore: score });
+            });
+
+            rankedParticipants.sort((a, b) => {
+                if (b.calculatedScore !== a.calculatedScore) {
+                    return b.calculatedScore - a.calculatedScore;
+                }
+                return (a.joinedAt || 0) - (b.joinedAt || 0);
+            });
+
+            const top1 = rankedParticipants[0] || { name: "虛位以待", calculatedScore: 0 };
+            const top2 = rankedParticipants[1] || { name: "虛位以待", calculatedScore: 0 };
+            const top3 = rankedParticipants[2] || { name: "虛位以待", calculatedScore: 0 };
+
+            safeSetText('rank-1-name', top1.name);
+            safeSetText('rank-1-score', top1.calculatedScore);
+            safeSetText('rank-2-name', top2.name);
+            safeSetText('rank-2-score', top2.calculatedScore);
+            safeSetText('rank-3-name', top3.name);
+            safeSetText('rank-3-score', top3.calculatedScore);
+
+            const listContainer = document.getElementById('screen-leaderboard-list');
+            if (listContainer) {
+                if (rankedParticipants.length === 0) {
+                    listContainer.innerHTML = '<div class="text-center text-stone-500 text-sm py-4">等待遊戲開始...</div>';
+                } else {
+                    listContainer.innerHTML = rankedParticipants.map((p, idx) => {
+                        const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx + 1}`;
+                        const rowClass = idx < 3 ? "bg-amber-500/10 border-amber-500/20" : "bg-neutral-950/60 border-stone-800";
+                        return `
+                            <div class="flex items-center justify-between p-3 rounded-lg border ${rowClass} text-sm">
+                                <div class="flex items-center gap-3 truncate">
+                                    <span class="font-extrabold w-6 text-center text-amber-400">${medal}</span>
+                                    <span class="font-bold text-white truncate">${p.name}</span>
+                                </div>
+                                <span class="font-black text-amber-300 bg-black/40 px-2 py-1 rounded">${p.calculatedScore} <span class="text-[10px] text-stone-400 font-normal">pt</span></span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            let answerCount = 0;
+            const dotsContainer = document.getElementById('screen-participants-dots');
+            
+            const dotsHTML = rankedParticipants.map(p => {
+                const hasAnswered = p.answers && p.answers[currentQId];
+                if (hasAnswered) answerCount++;
+                
+                const dotColorClass = hasAnswered 
+                    ? "bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-900/30" 
+                    : "bg-stone-800 text-stone-500 border-stone-700";
+                
+                return `<span class="px-2.5 py-1 text-xs font-bold rounded-full border transition-all ${dotColorClass}">${p.name}</span>`;
+            }).join('');
+
+            const subCountEl = document.getElementById('screen-sub-count');
+            if (subCountEl) {
+                subCountEl.innerHTML = `${answerCount} <span class="text-sm font-normal text-stone-500">/ ${rankedParticipants.length} 人</span>`;
+            }
+            if (dotsContainer) {
+                dotsContainer.innerHTML = dotsHTML || '<span class="text-stone-600 text-xs py-2 px-1">尚無人加入...</span>';
+            }
+
+            if (myUid) {
+                const me = allParticipantsSnapshot.find(p => p.id === myUid);
+                if (me) {
+                    const myScore = calculateParticipantScore(me.answers, mainAnswers);
+                    safeSetText('participant-score-display', `${myScore} pt`);
+                    
+                    let correctCount = 0;
+                    if (me.answers && mainAnswers) {
+                        for (const [qKey, ans] of Object.entries(me.answers)) {
+                            if (mainAnswers[qKey] && mainAnswers[qKey] === ans) {
+                                correctCount++;
+                            }
+                        }
+                    }
+                    safeSetText('participant-correct-display', `答對: ${correctCount} 題`);
+                }
+            }
+        }
+
+        function updateMainPlayerView(state, activeQ) {
+            const levelNames = ["初階題 (AB 二選一)", "進階題 (ABC 三選一)", "人生難題 (ABCD 四選一)"];
+            safeSetText('main-player-level-text', levelNames[state.currentLevel - 1]);
+            safeSetText('main-player-q-num', `第 ${state.currentQuestionNum} 題`);
+            safeSetText('main-player-q-text', activeQ.text || "題目載入中...");
+
+            const optionsGrid = document.getElementById('main-player-options-grid');
+            const statusCard = document.getElementById('main-player-status');
+            const labels = ['A', 'B', 'C', 'D'];
+
+            if (optionsGrid) {
+                optionsGrid.innerHTML = activeQ.options.map((opt, idx) => {
+                    const optLetter = labels[idx];
+                    const isSelected = state.currentMainAnswer === optLetter;
+                    
+                    const activeClass = isSelected 
+                        ? "bg-amber-400 text-stone-950 border-amber-300 font-extrabold shadow-lg scale-102" 
+                        : "bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700";
+                    
+                    return `
+                        <button onclick="submitMainPlayerAnswer('${optLetter}')" class="py-4 px-4 rounded-xl border text-left transition-all duration-200 flex items-center ${activeClass}">
+                            <span class="text-xl font-black mr-3 ${isSelected ? 'text-stone-950' : 'text-amber-400'}">${optLetter}.</span>
+                            <span class="text-sm font-semibold">${opt}</span>
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            if (statusCard) {
+                if (state.currentMainAnswer) {
+                    const selIdx = labels.indexOf(state.currentMainAnswer);
+                    const selText = activeQ.options[selIdx] || "";
+                    statusCard.innerHTML = `<span class="text-emerald-400 font-bold"><i class="fas fa-check-double"></i> 您已選擇正確答案為：<br>[ ${state.currentMainAnswer}. ${selText} ]</span><br><span class="text-stone-400 text-[10px]">主持人公佈答案前皆可重選</span>`;
+                } else {
+                    statusCard.innerHTML = `<span class="text-rose-400 font-bold"><i class="fas fa-exclamation-circle"></i> 尚未選答！請點選真實答案鎖定</span>`;
+                }
+            }
+        }
+
+        function updateParticipantView(state, activeQ) {
+            const currentQId = `level${state.currentLevel}-q${state.currentQuestionNum}`;
+            const levelNames = ["初階題 (AB)", "進階題 (ABC)", "人生難題 (ABCD)"];
+            const myUid = getCurrentUid();
+            
+            safeSetText('participant-level-text', levelNames[state.currentLevel - 1]);
+            safeSetText('participant-q-num', `第 ${state.currentQuestionNum} 題`);
+            safeSetText('participant-q-text', activeQ.text || "題目載入中...");
+
+            const me = allParticipantsSnapshot.find(p => p.id === myUid);
+            const myAnswerForThisQ = (me && me.answers) ? me.answers[currentQId] : null;
+
+            const optionsGrid = document.getElementById('participant-options-grid');
+            const statusCard = document.getElementById('participant-status-card');
+            const labels = ['A', 'B', 'C', 'D'];
+
+            if (optionsGrid) {
+                optionsGrid.innerHTML = activeQ.options.map((opt, idx) => {
+                    const optLetter = labels[idx];
+                    const isMyChoice = myAnswerForThisQ === optLetter;
+                    let activeClass = "bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700";
+                    
+                    if (isMyChoice) {
+                        activeClass = "bg-gradient-to-r from-rose-700 to-red-600 text-white border-rose-500 font-extrabold scale-102 shadow-lg shadow-rose-950/30";
+                    }
+
+                    const disabledAttr = state.status === 'revealed' ? 'disabled' : '';
+                    return `
+                        <button onclick="submitParticipantAnswer('${optLetter}')" ${disabledAttr} class="py-4 px-4 rounded-xl border text-left transition-all duration-200 flex items-center ${activeClass} disabled:opacity-50">
+                            <span class="text-xl font-black mr-3 ${isMyChoice ? 'text-white' : 'text-amber-400'}">${optLetter}.</span>
+                            <span class="text-sm font-semibold">${opt}</span>
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            if (statusCard) {
+                if (state.status === 'revealed') {
+                    const mainAns = state.currentMainAnswer;
+                    const isCorrect = myAnswerForThisQ === mainAns;
+                    const correctIdx = labels.indexOf(mainAns);
+                    const correctText = (correctIdx !== -1 && activeQ.options[correctIdx]) ? activeQ.options[correctIdx] : "";
+                    
+                    if (isCorrect) {
+                        statusCard.innerHTML = `<div class="bg-emerald-950/40 p-3 rounded-lg border border-emerald-800 text-emerald-400 font-bold">🎉 答對了！恭喜獲得積分！<br>主答者答案是 [ ${mainAns}. ${correctText} ]</div>`;
+                    } else {
+                        statusCard.innerHTML = `<div class="bg-rose-950/40 p-3 rounded-lg border border-rose-900 text-rose-400 font-bold">😢 猜錯了！再接再厲！<br>主答者答案是 [ ${mainAns}. ${correctText} ]</div>`;
+                    }
+                } else {
+                    if (myAnswerForThisQ) {
+                        const myIdx = labels.indexOf(myAnswerForThisQ);
+                        const myText = (myIdx !== -1 && activeQ.options[myIdx]) ? activeQ.options[myIdx] : "";
+                        statusCard.innerHTML = `<span class="text-amber-400 font-bold"><i class="fas fa-check"></i> 已送出預測： [ ${myAnswerForThisQ}. ${myText} ]</span><br><span class="text-stone-400 text-[10px]">主持人揭曉前，均可重新選擇</span>`;
+                    } else {
+                        statusCard.innerHTML = `<span class="text-stone-400 animate-pulse"><i class="fas fa-edit"></i> 請點擊上方選項，預測主答者的心理選擇</span>`;
+                    }
+                }
+            }
+        }
+
+        window.promptPasscode = function(role) {
+            const entered = prompt("請輸入該角色的管理金鑰：");
+            if (entered === ADMIN_PASSCODE) {
+                selectRole(role);
+            } else {
+                showToast("金鑰錯誤，無法開啟！");
+            }
+        };
+
+        window.selectRole = function(role) {
+            playSound('click');
+            activeRole = role;
+
+            safeClassAdd('role-selection-view', 'hidden');
+            safeClassAdd('view-screen', 'hidden');
+            safeClassAdd('view-admin', 'hidden');
+            safeClassAdd('view-mainPlayer', 'hidden');
+            safeClassAdd('view-participant', 'hidden');
+
+            safeClassRemove(`view-${role}`, 'hidden');
+
+            if (role === 'participant') {
+                const name = localStorage.getItem('guest_name') || "神秘嘉賓";
+                safeSetText('participant-identity-badge', `🙋 ${name}`);
+            }
+
+            startRealtimeSync();
+            showToast(`已成功切換為：${role === 'screen' ? '投影大螢幕' : role === 'admin' ? '主持人' : role === 'mainPlayer' ? '主答者' : '參與者'}`, true);
+        };
+
+        window.exitToRoleSelection = function() {
+            playSound('click');
+            if (unsubscribeSession) unsubscribeSession();
+            if (unsubscribeParticipants) unsubscribeParticipants();
+            
+            activeRole = null;
+            safeClassRemove('role-selection-view', 'hidden');
+            safeClassAdd('view-screen', 'hidden');
+            safeClassAdd('view-admin', 'hidden');
+            safeClassAdd('view-mainPlayer', 'hidden');
+            safeClassAdd('view-participant', 'hidden');
+        };
+
+        window.joinAsParticipant = function() {
+            const nameInput = document.getElementById('participant-name-input');
+            const nameVal = nameInput ? nameInput.value.trim() : "";
+            if (!nameVal) {
+                showToast("請輸入您的名字或桌號，方便統計名次喔！");
+                return;
+            }
+
+            localStorage.setItem('guest_name', nameVal);
+            playSound('join');
+
+            const myUid = getCurrentUid();
+            if (isSimulation) {
+                const existing = allParticipantsSnapshot.find(p => p.id === myUid);
+                if (!existing) {
+                    allParticipantsSnapshot.push({
+                        id: myUid,
+                        name: nameVal,
+                        joinedAt: Date.now(),
+                        answers: {}
+                    });
+                } else {
+                    existing.name = nameVal;
+                }
+                localStorage.setItem('sim_participants_snapshot', JSON.stringify(allParticipantsSnapshot));
+                broadcastSimUpdate('PARTICIPANTS_UPDATE', allParticipantsSnapshot);
+                selectRole('participant');
+                return;
+            }
+
+            if (!db || !myUid || !auth || !auth.currentUser) {
+                showToast("雲端初始化中，請稍候重試...");
+                return;
+            }
+
+            const pRef = doc(db, 'artifacts', appId, 'public', 'data', 'participants', myUid);
+            getDoc(pRef).then((docSnap) => {
+                if (!docSnap.exists()) {
+                    setDoc(pRef, {
+                        name: nameVal,
+                        joinedAt: Date.now(),
+                        answers: {}
+                    }).then(() => {
+                        selectRole('participant');
+                    }).catch(err => {
+                        selectRole('participant');
+                    });
+                } else {
+                    updateDoc(pRef, { name: nameVal }).then(() => {
+                        selectRole('participant');
+                    }).catch(err => {
+                        selectRole('participant');
+                    });
+                }
+            }).catch(err => {
+                selectRole('participant');
+            });
+        };
+
+        window.submitMainPlayerAnswer = async function(ans) {
+            playSound('click');
+            if (isSimulation) {
+                currentSessionState.currentMainAnswer = ans;
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                handleSessionStateChange(currentSessionState);
+                showToast(`已鎖定真實答案：${ans}`, true);
+                return;
+            }
+
+            if (!db || !currentSessionState || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            try {
+                await updateDoc(sessionRef, {
+                    currentMainAnswer: ans
+                });
+                showToast(`已鎖定真實答案：${ans}`, true);
+            } catch (err) {
+                console.error(err);
+                showToast("同步主答答案失敗");
+            }
+        };
+
+        window.submitParticipantAnswer = async function(ans) {
+            const myUid = getCurrentUid();
+            if (!currentSessionState) return;
+            if (currentSessionState.status === 'revealed') {
+                showToast("主持人已揭曉答案，無法再作答此題！");
+                return;
+            }
+            playSound('click');
+
+            const currentQId = `level${currentSessionState.currentLevel}-q${currentSessionState.currentQuestionNum}`;
+
+            if (isSimulation) {
+                const me = allParticipantsSnapshot.find(p => p.id === myUid);
+                if (me) {
+                    if (!me.answers) me.answers = {};
+                    me.answers[currentQId] = ans;
+                    localStorage.setItem('sim_participants_snapshot', JSON.stringify(allParticipantsSnapshot));
+                    broadcastSimUpdate('PARTICIPANTS_UPDATE', allParticipantsSnapshot);
+                    renderLeaderboardAndProgress();
+                    showToast(`已送出您的預測：${ans}`, true);
+                }
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) return;
+            const pRef = doc(db, 'artifacts', appId, 'public', 'data', 'participants', myUid);
+            try {
+                await updateDoc(pRef, {
+                    [`answers.${currentQId}`]: ans
+                });
+                showToast(`已送出您的預測：${ans}`, true);
+            } catch (err) {
+                console.error(err);
+                showToast("送出答案失敗");
+            }
+        };
+
+        window.saveCurrentQuestionEdit = async function() {
+            if (!currentSessionState) return;
+            playSound('click');
+
+            const lvl = currentSessionState.currentLevel;
+            const qNum = currentSessionState.currentQuestionNum;
+            const questionsList = JSON.parse(JSON.stringify(currentSessionState.questions || DEFAULT_QUESTIONS));
+
+            const textVal = document.getElementById('admin-edit-q-text').value.trim();
+            const optA = document.getElementById('admin-edit-opt-a').value.trim();
+            const optB = document.getElementById('admin-edit-opt-b').value.trim();
+            const optC = document.getElementById('admin-edit-opt-c').value.trim();
+            const optD = document.getElementById('admin-edit-opt-d').value.trim();
+
+            const opts = [optA, optB];
+            if (lvl >= 2) opts.push(optC);
+            if (lvl === 3) opts.push(optD);
+
+            let targetIdx = questionsList.findIndex(q => q.level === lvl && q.num === qNum);
+            const newQObj = { level: lvl, num: qNum, text: textVal, options: opts };
+
+            if (targetIdx !== -1) {
+                questionsList[targetIdx] = newQObj;
+            } else {
+                questionsList.push(newQObj);
+            }
+
+            if (isSimulation) {
+                currentSessionState.questions = questionsList;
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                handleSessionStateChange(currentSessionState);
+                showToast("已成功更新並實時發佈此題內容！", true);
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            try {
+                await updateDoc(sessionRef, {
+                    questions: questionsList
+                });
+                showToast("已成功更新並實時發佈此題內容！", true);
+            } catch (err) {
+                showToast("儲存失敗");
+            }
+        };
+
+        window.toggleJsonPanel = function() {
+            const panel = document.getElementById('admin-json-panel');
+            if (panel) panel.classList.toggle('hidden');
+        };
+
+        window.applyJsonImport = async function() {
+            playSound('click');
+            const txt = document.getElementById('admin-json-textarea').value.trim();
+            try {
+                const parsed = JSON.parse(txt);
+                if (!Array.isArray(parsed)) {
+                    showToast("格式必須是數組 []！");
+                    return;
+                }
+
+                if (isSimulation) {
+                    currentSessionState.questions = parsed;
+                    localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                    broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                    handleSessionStateChange(currentSessionState);
+                    showToast("題庫已成功導入！", true);
+                    return;
+                }
+
+                if (!db || !auth || !auth.currentUser) return;
+                const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+                await updateDoc(sessionRef, {
+                    questions: parsed
+                });
+                showToast("題庫已導入成功！", true);
+            } catch (e) {
+                showToast("JSON 語法解析失敗！");
+            }
+        };
+
+        window.resetToDefaultQuestions = async function() {
+            playSound('click');
+            if (isSimulation) {
+                currentSessionState.questions = DEFAULT_QUESTIONS;
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                handleSessionStateChange(currentSessionState);
+                showToast("已恢復預設題庫！", true);
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            try {
+                await updateDoc(sessionRef, {
+                    questions: DEFAULT_QUESTIONS
+                });
+                showToast("已恢復預設測試題庫！", true);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        window.setGameLevel = async function(lvl) {
+            playSound('click');
+            if (isSimulation) {
+                currentSessionState.currentLevel = lvl;
+                currentSessionState.currentQuestionNum = 1;
+                currentSessionState.currentMainAnswer = null;
+                currentSessionState.status = 'voting';
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                handleSessionStateChange(currentSessionState);
+                showToast(`已切換關卡：第 ${lvl} 階段`, true);
+                return;
+            }
+
+            if (!db || !currentSessionState || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            try {
+                await updateDoc(sessionRef, {
+                    currentLevel: lvl,
+                    currentQuestionNum: 1,
+                    currentMainAnswer: null,
+                    status: 'voting'
+                });
+                showToast(`已將關卡切換為：第 ${lvl} 階段`, true);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        window.adjustQuestionNum = async function(val) {
+            playSound('click');
+            if (!currentSessionState) return;
+            const nextNum = Math.max(1, currentSessionState.currentQuestionNum + val);
+
+            if (isSimulation) {
+                currentSessionState.currentQuestionNum = nextNum;
+                currentSessionState.currentMainAnswer = null;
+                currentSessionState.status = 'voting';
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                handleSessionStateChange(currentSessionState);
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            try {
+                await updateDoc(sessionRef, {
+                    currentQuestionNum: nextNum,
+                    currentMainAnswer: null,
+                    status: 'voting'
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        window.triggerRevealAnswer = async function() {
+            if (!currentSessionState) return;
+
+            if (isSimulation) {
+                if (!currentSessionState.currentMainAnswer) {
+                    showToast("⚠️ 警告：主答者尚未在手機上選取「真實答案」！");
+                    return;
+                }
+                playSound('reveal');
+                const currentQId = `level${currentSessionState.currentLevel}-q${currentSessionState.currentQuestionNum}`;
+                currentSessionState.status = 'revealed';
+                currentSessionState.mainPlayerAnswers[currentQId] = currentSessionState.currentMainAnswer;
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                handleSessionStateChange(currentSessionState);
+                renderLeaderboardAndProgress();
+                showToast("已揭曉本題答案，全場計分完成！", true);
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            showToast("驗證作答狀態...", false);
+            
+            try {
+                const freshSnap = await getDoc(sessionRef);
+                if (freshSnap.exists()) {
+                    const freshState = freshSnap.data();
+                    if (!freshState.currentMainAnswer) {
+                        showToast("⚠️ 警告：主答者尚未在手機上選取「真實答案」！");
+                        return;
+                    }
+                    currentSessionState = freshState;
+                }
+            } catch (err) {
+                console.error("Fetch verification failed", err);
+            }
+
+            playSound('reveal');
+            const currentQId = `level${currentSessionState.currentLevel}-q${currentSessionState.currentQuestionNum}`;
+            
+            try {
+                await updateDoc(sessionRef, {
+                    status: 'revealed',
+                    [`mainPlayerAnswers.${currentQId}`]: currentSessionState.currentMainAnswer
+                });
+                showToast("已揭曉本題答案，全場計分完成！", true);
+            } catch (err) {
+                console.error(err);
+                showToast("操作失敗");
+            }
+        };
+
+        window.nextQuestionFlow = async function() {
+            if (!currentSessionState) return;
+            playSound('click');
+            const nextNum = currentSessionState.currentQuestionNum + 1;
+
+            if (isSimulation) {
+                currentSessionState.currentQuestionNum = nextNum;
+                currentSessionState.currentMainAnswer = null;
+                currentSessionState.status = 'voting';
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                handleSessionStateChange(currentSessionState);
+                showToast(`已進入第 ${nextNum} 題！`);
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            try {
+                await updateDoc(sessionRef, {
+                    currentQuestionNum: nextNum,
+                    currentMainAnswer: null,
+                    status: 'voting'
+                });
+                showToast(`已進入第 ${nextNum} 題！`);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        window.confirmResetAllGame = function() {
+            playSound('click');
+            const modal = document.getElementById('confirm-modal');
+            if (modal) modal.classList.remove('hidden');
+
+            const btnYes = document.getElementById('confirm-modal-yes');
+            if (btnYes) {
+                btnYes.onclick = async function() {
+                    if (modal) modal.classList.add('hidden');
+                    await executeResetAllGame();
+                };
+            }
+
+            const btnNo = document.getElementById('confirm-modal-no');
+            if (btnNo) {
+                btnNo.onclick = function() {
+                    if (modal) modal.classList.add('hidden');
+                };
+            }
+        };
+
+        async function executeResetAllGame() {
+            if (isSimulation) {
+                currentSessionState = {
+                    currentLevel: 1,
+                    currentQuestionNum: 1,
+                    status: 'voting',
+                    currentMainAnswer: null,
+                    mainPlayerAnswers: {},
+                    questions: DEFAULT_QUESTIONS
+                };
+                allParticipantsSnapshot = allParticipantsSnapshot.map(p => {
+                    return Object.assign({}, p, { answers: {} });
+                });
+                localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
+                localStorage.setItem('sim_participants_snapshot', JSON.stringify(allParticipantsSnapshot));
+                broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
+                broadcastSimUpdate('PARTICIPANTS_UPDATE', allParticipantsSnapshot);
+                
+                handleSessionStateChange(currentSessionState);
+                renderLeaderboardAndProgress();
+                showToast("遊戲與模擬庫已成功重置！", true);
+                return;
+            }
+
+            if (!db || !auth || !auth.currentUser) return;
+            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameSession', 'main');
+            try {
+                await setDoc(sessionRef, {
+                    currentLevel: 1,
+                    currentQuestionNum: 1,
+                    status: 'voting',
+                    currentMainAnswer: null,
+                    mainPlayerAnswers: {},
+                    questions: DEFAULT_QUESTIONS
+                });
+
+                const querySnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'participants'));
+                const batch = writeBatch(db);
+                querySnap.forEach((doc) => {
+                    batch.update(doc.ref, { answers: {} });
+                });
+                await batch.commit();
+
+                showToast("遊戲數據與自訂題庫已完全重設！", true);
+            } catch (err) {
+                console.error(err);
+                showToast("重置失敗");
+            }
+        }
+
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas ? canvas.getContext('2d') : null;
+        let confettiActive = false;
+        let confettiTimeout = null;
+        let pieces = [];
+
+        function randomRange(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+
+        class ConfettiPiece {
+            constructor() {
+                this.x = randomRange(0, canvas.width);
+                this.y = randomRange(-50, -10);
+                this.size = randomRange(8, 15);
+                this.color = `hsl(${randomRange(0, 360)}, 90%, 60%)`;
+                this.speedX = randomRange(-3, 3);
+                this.speedY = randomRange(2, 6);
+                this.rotation = randomRange(0, Math.PI * 2);
+                this.rotationSpeed = randomRange(-0.1, 0.1);
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.rotation += this.rotationSpeed;
+                if (this.y > canvas.height) {
+                    this.y = -20;
+                    this.x = randomRange(0, canvas.width);
+                }
+            }
+            draw() {
+                if (!ctx) return;
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.fillStyle = this.color;
+                ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+                ctx.restore();
+            }
+        }
+
+        function triggerConfetti() {
+            if (!canvas || !ctx) return;
+            canvas.classList.remove('hidden');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            if (confettiActive) return;
+            confettiActive = true;
+            
+            pieces = [];
+            for (let i = 0; i < 150; i++) {
+                pieces.push(new ConfettiPiece());
+            }
+
+            function animate() {
+                if (!confettiActive) return;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                pieces.forEach(p => {
+                    p.update();
+                    p.draw();
+                });
+                requestAnimationFrame(animate);
+            }
+            animate();
+
+            clearTimeout(confettiTimeout);
+            confettiTimeout = setTimeout(() => {
+                confettiActive = false;
+                canvas.classList.add('hidden');
+            }, 5000);
+        }
+
+        window.addEventListener('resize', () => {
+            if (confettiActive && canvas) {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+        });
+
+        window.onload = function() {
+            initFirebase();
+        };
+
+    </script>
+</body>
+</html>
