@@ -378,11 +378,16 @@
             </div>
         </div>
 
-        <div class="border-t border-stone-800 pt-4 flex justify-between items-center">
-            <div class="text-xs text-stone-500">警告：重設將清除全場所有人的分數！</div>
-            <button onclick="confirmResetAllGame()" class="px-4 py-2 bg-red-950 text-red-400 border border-red-900 rounded-lg text-sm hover:bg-red-900 hover:text-white font-bold transition-all">
-                ⚠️ 清空重來
-            </button>
+        <div class="border-t border-stone-800 pt-4 flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
+            <div class="text-xs text-stone-500">可匯出目前答題紀錄；重設將清除全場所有人的分數！</div>
+            <div class="flex gap-2 justify-end">
+                <button onclick="exportGameExcel()" class="px-4 py-2 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-lg text-sm hover:bg-emerald-900 hover:text-white font-bold transition-all">
+                    📊 匯出 Excel
+                </button>
+                <button onclick="confirmResetAllGame()" class="px-4 py-2 bg-red-950 text-red-400 border border-red-900 rounded-lg text-sm hover:bg-red-900 hover:text-white font-bold transition-all">
+                    ⚠️ 清空重來
+                </button>
+            </div>
         </div>
     </div>
 
@@ -857,6 +862,9 @@
                 if (docSnap.exists()) {
                     currentSessionState = docSnap.data();
                     handleSessionStateChange(currentSessionState);
+                    // Session 更新（尤其是公布答案寫入 mainPlayerAnswers）也要立即重算分數。
+                    // 以前只在 participants 更新時重算，所以有時要等下一題/下一次作答才看到分數變化。
+                    renderLeaderboardAndProgress();
                 } else {
                     initializeGameSession();
                 }
@@ -1690,6 +1698,13 @@
                         [currentQId]: currentSessionState.currentMainAnswer
                     }
                 });
+                // 立即更新本機狀態與分數，不必等下一次 Firestore snapshot。
+                currentSessionState.status = 'revealed';
+                currentSessionState.mainPlayerAnswers = Object.assign({}, currentSessionState.mainPlayerAnswers || {}, {
+                    [currentQId]: currentSessionState.currentMainAnswer
+                });
+                handleSessionStateChange(currentSessionState);
+                renderLeaderboardAndProgress();
                 showToast("已揭曉本題答案，全場計分完成！", true);
             } catch (err) {
                 console.error(err);
@@ -1725,6 +1740,172 @@
             } catch (err) {
                 console.error(err);
             }
+        };
+
+
+        function htmlEscapeForExport(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function formatAnswerForExport(q, answer) {
+            if (!answer) return '未作答';
+            const labels = ['A', 'B', 'C', 'D'];
+            const idx = labels.indexOf(answer);
+            const text = idx >= 0 && q && q.options && q.options[idx] ? q.options[idx] : '';
+            return text ? `${answer}. ${text}` : answer;
+        }
+
+        function getSortedQuestionsForExport() {
+            const questions = (currentSessionState && currentSessionState.questions) ? currentSessionState.questions : DEFAULT_QUESTIONS;
+            return [...questions].sort((a, b) => (a.level - b.level) || (a.num - b.num));
+        }
+
+        function buildQuestionId(q) {
+            return `level${q.level}-q${q.num}`;
+        }
+
+        function calculateCorrectCount(participantAnswers, mainAnswers) {
+            let correctCount = 0;
+            if (!participantAnswers || !mainAnswers) return 0;
+            for (const [qKey, ans] of Object.entries(participantAnswers)) {
+                if (mainAnswers[qKey] && mainAnswers[qKey] === ans) correctCount++;
+            }
+            return correctCount;
+        }
+
+        window.exportGameExcel = function() {
+            if (!currentSessionState) {
+                showToast('目前沒有可匯出的遊戲資料');
+                return;
+            }
+
+            const questions = getSortedQuestionsForExport();
+            const mainAnswers = currentSessionState.mainPlayerAnswers || {};
+            const labels = ['A', 'B', 'C', 'D'];
+            const participants = allParticipantsSnapshot.map(p => {
+                const score = calculateParticipantScore(p.answers, mainAnswers);
+                const correctCount = calculateCorrectCount(p.answers, mainAnswers);
+                return Object.assign({}, p, { calculatedScore: score, correctCount });
+            }).sort((a, b) => {
+                if (b.calculatedScore !== a.calculatedScore) return b.calculatedScore - a.calculatedScore;
+                if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+                return (a.joinedAt || 0) - (b.joinedAt || 0);
+            });
+
+            const generatedAt = new Date().toLocaleString('zh-TW', { hour12: false });
+            const currentInfo = `目前第 ${currentSessionState.currentLevel || '-'} 關，第 ${currentSessionState.currentQuestionNum || '-'} 題，狀態：${currentSessionState.status === 'revealed' ? '已公布' : '作答中'}`;
+
+            let html = `
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: "Noto Sans TC", Arial, sans-serif; }
+                        table { border-collapse: collapse; margin-bottom: 24px; }
+                        th, td { border: 1px solid #999; padding: 6px 8px; mso-number-format:"\\@"; }
+                        th { background: #f4d03f; font-weight: bold; }
+                        .section { background: #7d3c98; color: #fff; font-weight: bold; font-size: 16px; }
+                        .correct { background: #d5f5e3; }
+                        .wrong { background: #fadbd8; }
+                        .muted { background: #eeeeee; }
+                    </style>
+                </head>
+                <body>
+                    <h2>煥周默契王－答題紀錄匯出</h2>
+                    <p>匯出時間：${htmlEscapeForExport(generatedAt)}</p>
+                    <p>${htmlEscapeForExport(currentInfo)}</p>
+                    <table>
+                        <tr><td class="section" colspan="${5 + questions.length}">排行榜與個人答題明細</td></tr>
+                        <tr>
+                            <th>名次</th><th>姓名/桌號</th><th>總分</th><th>答對題數</th><th>已作答題數</th>
+                            ${questions.map(q => `<th>L${q.level}-Q${q.num}<br>${htmlEscapeForExport(q.text || '')}</th>`).join('')}
+                        </tr>
+            `;
+
+            if (participants.length === 0) {
+                html += `<tr><td colspan="${5 + questions.length}">目前尚無參與者資料</td></tr>`;
+            } else {
+                participants.forEach((p, idx) => {
+                    const answeredCount = p.answers ? Object.keys(p.answers).length : 0;
+                    html += `<tr>
+                        <td>${idx + 1}</td>
+                        <td>${htmlEscapeForExport(p.name || '')}</td>
+                        <td>${p.calculatedScore}</td>
+                        <td>${p.correctCount}</td>
+                        <td>${answeredCount}</td>`;
+                    questions.forEach(q => {
+                        const qId = buildQuestionId(q);
+                        const ans = p.answers && p.answers[qId] ? p.answers[qId] : '';
+                        const mainAns = mainAnswers[qId];
+                        let cls = '';
+                        let suffix = '';
+                        if (!ans) {
+                            cls = 'muted';
+                        } else if (mainAns) {
+                            cls = ans === mainAns ? 'correct' : 'wrong';
+                            suffix = ans === mainAns ? '（答對）' : `（答錯，正解：${mainAns}）`;
+                        }
+                        html += `<td class="${cls}">${htmlEscapeForExport(formatAnswerForExport(q, ans) + suffix)}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+            }
+
+            html += `</table>`;
+
+            html += `
+                <table>
+                    <tr><td class="section" colspan="8">各題選項統計</td></tr>
+                    <tr><th>關卡</th><th>題號</th><th>題目</th><th>主答者答案</th><th>選項</th><th>作答人數</th><th>比例</th><th>未作答人數</th></tr>
+            `;
+
+            questions.forEach(q => {
+                const qId = buildQuestionId(q);
+                const totalParticipants = participants.length;
+                const counts = {};
+                labels.forEach(l => counts[l] = 0);
+                participants.forEach(p => {
+                    const ans = p.answers && p.answers[qId];
+                    if (ans && counts[ans] !== undefined) counts[ans]++;
+                });
+                const answeredTotal = Object.values(counts).reduce((sum, n) => sum + n, 0);
+                const unanswered = Math.max(0, totalParticipants - answeredTotal);
+                const mainAns = mainAnswers[qId] || '';
+                (q.options || []).forEach((opt, idx) => {
+                    const letter = labels[idx];
+                    const count = counts[letter] || 0;
+                    const percent = answeredTotal > 0 ? `${Math.round((count / answeredTotal) * 100)}%` : '0%';
+                    const cls = mainAns && mainAns === letter ? 'correct' : '';
+                    html += `<tr class="${cls}">
+                        <td>${q.level}</td>
+                        <td>${q.num}</td>
+                        <td>${htmlEscapeForExport(q.text || '')}</td>
+                        <td>${htmlEscapeForExport(mainAns ? formatAnswerForExport(q, mainAns) : '尚未公布')}</td>
+                        <td>${htmlEscapeForExport(`${letter}. ${opt}`)}</td>
+                        <td>${count}</td>
+                        <td>${percent}</td>
+                        <td>${unanswered}</td>
+                    </tr>`;
+                });
+            });
+
+            html += `</table></body></html>`;
+
+            const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            a.href = url;
+            a.download = `煥周默契王_答題紀錄_${timestamp}.xls`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('已匯出 Excel 檔案', true);
         };
 
         window.confirmResetAllGame = function() {
