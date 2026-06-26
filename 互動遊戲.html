@@ -205,6 +205,14 @@
                     <p class="text-amber-400 font-bold text-md mb-2"><i class="fas fa-bullhorn"></i> 主答者鎖定的真實答案</p>
                     <span id="screen-correct-answer" class="text-4xl font-black text-white gold-glow">?</span>
                 </div>
+
+                <div id="screen-answer-stats-panel" class="hidden mt-4 p-4 bg-neutral-950/80 border border-stone-800 rounded-xl max-w-xl mx-auto">
+                    <div class="flex items-center justify-between mb-3">
+                        <p class="text-amber-300 font-black text-sm"><i class="fas fa-chart-bar"></i> 本題答題統計</p>
+                        <span id="screen-answer-stats-total" class="text-stone-400 text-xs">0 人作答</span>
+                    </div>
+                    <div id="screen-answer-stats-list" class="space-y-2"></div>
+                </div>
             </div>
 
             <div class="mt-4">
@@ -1008,6 +1016,58 @@
             return total;
         }
 
+        function renderAnswerStatsPanel(state, activeQ) {
+            const panel = document.getElementById('screen-answer-stats-panel');
+            const totalEl = document.getElementById('screen-answer-stats-total');
+            const listEl = document.getElementById('screen-answer-stats-list');
+            if (!panel || !totalEl || !listEl || !state || !activeQ) return;
+
+            // 避免在主持人公布前洩漏主答者答案或答對/答錯狀態
+            if (state.status !== 'revealed') {
+                panel.classList.add('hidden');
+                listEl.innerHTML = '';
+                totalEl.innerText = '0 人作答';
+                return;
+            }
+
+            const labels = ['A', 'B', 'C', 'D'];
+            const currentQId = `level${state.currentLevel}-q${state.currentQuestionNum}`;
+            const counts = {};
+            labels.forEach(l => counts[l] = 0);
+
+            allParticipantsSnapshot.forEach(p => {
+                const ans = p.answers && p.answers[currentQId];
+                if (ans && counts[ans] !== undefined) counts[ans]++;
+            });
+
+            const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+            totalEl.innerText = `${total} 人作答`;
+            panel.classList.remove('hidden');
+
+            listEl.innerHTML = activeQ.options.map((opt, idx) => {
+                const letter = labels[idx];
+                const count = counts[letter] || 0;
+                const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+                const isCorrect = state.currentMainAnswer === letter;
+                const barClass = isCorrect ? 'bg-emerald-500' : 'bg-amber-500';
+                const borderClass = isCorrect ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-stone-800 bg-stone-900/60';
+                const badge = isCorrect ? '<span class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">主答者答案</span>' : '';
+                return `
+                    <div class="p-2 rounded-lg border ${borderClass}">
+                        <div class="flex justify-between items-center gap-3 text-xs mb-1">
+                            <div class="font-bold text-stone-200 truncate">
+                                <span class="text-amber-400 mr-1">${letter}.</span>${opt}${badge}
+                            </div>
+                            <div class="text-stone-300 font-black whitespace-nowrap">${count} 人｜${percent}%</div>
+                        </div>
+                        <div class="w-full h-2.5 bg-stone-800 rounded-full overflow-hidden">
+                            <div class="${barClass} h-full rounded-full transition-all duration-500" style="width:${percent}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function updateScreenView(state, activeQ) {
             const levelNames = ["初階題 (AB 二選一)", "進階題 (ABC 三選一)", "人生難題 (ABCD 四選一)"];
             safeSetText('screen-level-badge', `目前階段：${levelNames[state.currentLevel - 1]}`);
@@ -1060,6 +1120,8 @@
             } else {
                 if (revealPanel) revealPanel.classList.add('hidden');
             }
+
+            renderAnswerStatsPanel(state, activeQ);
         }
 
         function renderLeaderboardAndProgress() {
@@ -1152,6 +1214,10 @@
                     safeSetText('participant-correct-display', `答對: ${correctCount} 題`);
                 }
             }
+
+            if (activeRole === 'screen' && currentSessionState) {
+                renderAnswerStatsPanel(currentSessionState, getActiveQuestion(currentSessionState));
+            }
         }
 
         function updateMainPlayerView(state, activeQ) {
@@ -1213,13 +1279,20 @@
                 optionsGrid.innerHTML = activeQ.options.map((opt, idx) => {
                     const optLetter = labels[idx];
                     const isMyChoice = myAnswerForThisQ === optLetter;
+                    const isRevealed = state.status === 'revealed';
+                    const isCorrectAnswer = state.currentMainAnswer === optLetter;
                     let activeClass = "bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700";
                     
-                    if (isMyChoice) {
+                    if (!isRevealed && isMyChoice) {
+                        // 公布前只顯示「我選了這個」，不可用紅/綠提前洩漏對錯
+                        activeClass = "bg-amber-500/20 text-amber-100 border-amber-400 font-extrabold scale-102 shadow-lg shadow-amber-950/30";
+                    } else if (isRevealed && isCorrectAnswer) {
+                        activeClass = "bg-emerald-700 text-white border-emerald-400 font-extrabold shadow-lg shadow-emerald-950/30";
+                    } else if (isRevealed && isMyChoice && !isCorrectAnswer) {
                         activeClass = "bg-gradient-to-r from-rose-700 to-red-600 text-white border-rose-500 font-extrabold scale-102 shadow-lg shadow-rose-950/30";
                     }
 
-                    const disabledAttr = state.status === 'revealed' ? 'disabled' : '';
+                    const disabledAttr = isRevealed ? 'disabled' : '';
                     return `
                         <button onclick="submitParticipantAnswer('${optLetter}')" ${disabledAttr} class="py-4 px-4 rounded-xl border text-left transition-all duration-200 flex items-center ${activeClass} disabled:opacity-50">
                             <span class="text-xl font-black mr-3 ${isMyChoice ? 'text-white' : 'text-amber-400'}">${optLetter}.</span>
