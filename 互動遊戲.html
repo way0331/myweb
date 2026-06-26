@@ -78,7 +78,7 @@
         <div class="bg-stone-900 border-2 border-red-500/30 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
             <div class="text-red-500 text-4xl"><i class="fas fa-exclamation-triangle animate-bounce"></i></div>
             <h3 class="text-xl font-black text-white">確定要重置遊戲嗎？</h3>
-            <p class="text-stone-400 text-sm">這將會清除全場所有人的分數、答案與自訂題庫，此操作無法復原！</p>
+            <p class="text-stone-400 text-sm">這將會清除全場所有人的分數、答案、參與者名單與自訂題庫，此操作無法復原！</p>
             <div class="flex gap-3 justify-center pt-2">
                 <button id="confirm-modal-yes" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-sm transition-colors">確定重設</button>
                 <button id="confirm-modal-no" class="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold rounded-lg text-sm transition-colors">取消</button>
@@ -157,9 +157,9 @@
         <div class="border-t border-stone-800 my-1"></div>
         
         <!-- 雲端設定入口按鈕 -->
-        <button onclick="openDbConfigModal()" class="w-full py-2.5 bg-stone-950 hover:bg-stone-900 border border-amber-500/20 text-amber-400 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all">
-            <i class="fas fa-database text-amber-500"></i> ⚙️ 設定專屬雲端連線 (跨裝置多機同步必備)
-        </button>
+        <!-- <button onclick="openDbConfigModal()" class="w-full py-2.5 bg-stone-950 hover:bg-stone-900 border border-amber-500/20 text-amber-400 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all">-->
+            <!--<i class="fas fa-database text-amber-500"></i> ⚙️ 設定專屬雲端連線 (跨裝置多機同步必備)-->
+         <!-- </button>-->
     </div>
 
     <!-- ================= 1. 🖥️ 投影大螢幕 ================= -->
@@ -286,6 +286,41 @@
         </div>
 
         <div class="bg-neutral-950 p-4 rounded-xl border border-stone-800 space-y-4">
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-stone-300 text-sm font-bold"><i class="fas fa-users"></i> 玩家作答進度</span>
+                    <span id="admin-progress-percent" class="text-amber-400 text-sm font-black">0%</span>
+                </div>
+                <div class="w-full h-3 bg-stone-800 rounded-full overflow-hidden">
+                    <div id="admin-progress-bar" class="h-full bg-amber-500 rounded-full transition-all duration-500" style="width:0%"></div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-stone-400">
+                    <span id="admin-progress-detail">已作答 0 / 0 人</span>
+                    <span id="admin-unanswered-detail">未作答 0 人</span>
+                </div>
+            </div>
+            <div class="border-t border-stone-800 pt-3">
+                <button onclick="toggleCorrectListPanel()" class="text-xs text-emerald-400 hover:underline font-bold">
+                    <i class="fas fa-list-check"></i> 查看答對名單
+                </button>
+                <div id="admin-correct-list-panel" class="hidden mt-2 max-h-32 overflow-y-auto bg-stone-900/80 border border-stone-800 rounded-lg p-3 text-xs">
+                    <div id="admin-correct-list" class="text-stone-400">尚未公布答案</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-neutral-950 p-4 rounded-xl border border-amber-500/20 flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div class="flex-1 min-w-0">
+                <h3 class="font-black text-amber-300 text-sm"><i class="fas fa-qrcode"></i> 參與者加入 QR Code</h3>
+                <p class="text-stone-500 text-[11px] mt-1">此 QR Code 會使用目前網頁網址自動產生，不會寫死其他網址。</p>
+                <p id="admin-current-url" class="text-emerald-400 text-[11px] mt-2 break-all font-mono">載入目前網址中...</p>
+            </div>
+            <div class="bg-white p-2 rounded-lg">
+                <img id="admin-join-qr" alt="加入遊戲 QR Code" class="w-28 h-28" />
+            </div>
+        </div>
+
+        <div class="bg-neutral-950 p-4 rounded-xl border border-stone-800 space-y-4">
             <h3 class="font-bold text-stone-300">🎮 第一步：切換關卡與題號</h3>
             
             <div class="grid grid-cols-3 gap-2">
@@ -379,7 +414,7 @@
         </div>
 
         <div class="border-t border-stone-800 pt-4 flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
-            <div class="text-xs text-stone-500">可匯出目前答題紀錄；重設將清除全場所有人的分數！</div>
+            <div class="text-xs text-stone-500">可匯出目前答題紀錄；重設將清除參與者、分數與答案！</div>
             <div class="flex gap-2 justify-end">
                 <button onclick="exportGameExcel()" class="px-4 py-2 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-lg text-sm hover:bg-emerald-900 hover:text-white font-bold transition-all">
                     📊 匯出 Excel
@@ -822,7 +857,7 @@
                         console.log("Authenticated UID:", user.uid);
                         const indicator = document.getElementById('sync-mode-indicator');
                         if (indicator) {
-                            indicator.innerHTML = '<span class="text-emerald-400 font-bold"><i class="fas fa-wifi"></i> 雲端即時連動中 (Firebase)</span>';
+                            indicator.innerHTML = '<span class="text-emerald-400 font-bold"><i class="fas fa-wifi"></i> 雲端即時連動中</span>';
                         }
                         const savedName = localStorage.getItem('guest_name');
                         const inputField = document.getElementById('participant-name-input');
@@ -973,6 +1008,8 @@
                     if (p.answers && p.answers[currentQId]) answerCount++;
                 });
                 safeSetText('admin-participants-answered-count', `${answerCount} / ${allParticipantsSnapshot.length} 人`);
+                renderAdminProgressExtras(state);
+                updateAdminJoinQr();
 
                 // 同步題目文字輸入框
                 const editQText = document.getElementById('admin-edit-q-text');
@@ -1032,6 +1069,71 @@
                 }
             }
             return total;
+        }
+
+
+        function getCurrentQuestionIdFromState(state) {
+            if (!state) return '';
+            return `level${state.currentLevel}-q${state.currentQuestionNum}`;
+        }
+
+        function getParticipantAnswerForQuestion(p, qId) {
+            return p && p.answers ? p.answers[qId] : null;
+        }
+
+        function renderAdminProgressExtras(state) {
+            if (activeRole !== 'admin' || !state) return;
+            const currentQId = getCurrentQuestionIdFromState(state);
+            const total = allParticipantsSnapshot.length;
+            let answered = 0;
+            allParticipantsSnapshot.forEach(p => {
+                if (getParticipantAnswerForQuestion(p, currentQId)) answered++;
+            });
+            const percent = total > 0 ? Math.round((answered / total) * 100) : 0;
+
+            safeSetText('admin-progress-percent', `${percent}%`);
+            safeSetText('admin-progress-detail', `已作答 ${answered} / ${total} 人`);
+            safeSetText('admin-unanswered-detail', `未作答 ${Math.max(0, total - answered)} 人`);
+            const bar = document.getElementById('admin-progress-bar');
+            if (bar) bar.style.width = `${percent}%`;
+
+            const listEl = document.getElementById('admin-correct-list');
+            if (listEl) {
+                if (state.status !== 'revealed' || !state.currentMainAnswer) {
+                    listEl.innerHTML = '<span class="text-stone-500">尚未公布答案；公布後才會顯示答對名單。</span>';
+                } else {
+                    const winners = allParticipantsSnapshot
+                        .filter(p => getParticipantAnswerForQuestion(p, currentQId) === state.currentMainAnswer)
+                        .map(p => p.name || '未命名參與者');
+                    if (winners.length === 0) {
+                        listEl.innerHTML = '<span class="text-rose-400">本題目前沒有人答對。</span>';
+                    } else {
+                        listEl.innerHTML = `
+                            <div class="text-emerald-400 font-bold mb-2">答對 ${winners.length} 人：</div>
+                            <div class="flex flex-wrap gap-1.5">
+                                ${winners.map(name => `<span class="px-2 py-1 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300">✔ ${name}</span>`).join('')}
+                            </div>
+                        `;
+                    }
+                }
+            }
+        }
+
+        window.toggleCorrectListPanel = function() {
+            playSound('click');
+            const panel = document.getElementById('admin-correct-list-panel');
+            if (panel) panel.classList.toggle('hidden');
+            renderAdminProgressExtras(currentSessionState);
+        };
+
+        function updateAdminJoinQr() {
+            const urlEl = document.getElementById('admin-current-url');
+            const qrEl = document.getElementById('admin-join-qr');
+            const joinUrl = window.location.href;
+            if (urlEl) urlEl.innerText = joinUrl;
+            if (qrEl) {
+                qrEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`;
+            }
         }
 
         function renderAnswerStatsPanel(state, activeQ) {
@@ -1235,6 +1337,10 @@
 
             if (activeRole === 'screen' && currentSessionState) {
                 renderAnswerStatsPanel(currentSessionState, getActiveQuestion(currentSessionState));
+            }
+            if (activeRole === 'admin' && currentSessionState) {
+                renderAdminProgressExtras(currentSessionState);
+                updateAdminJoinQr();
             }
         }
 
@@ -1942,9 +2048,7 @@
         async function executeResetAllGame() {
             if (isSimulation) {
                 currentSessionState = createDefaultSessionState();
-                allParticipantsSnapshot = allParticipantsSnapshot.map(p => {
-                    return Object.assign({}, p, { answers: {} });
-                });
+                allParticipantsSnapshot = [];
                 localStorage.setItem('sim_session_state', JSON.stringify(currentSessionState));
                 localStorage.setItem('sim_participants_snapshot', JSON.stringify(allParticipantsSnapshot));
                 broadcastSimUpdate('SESSION_UPDATE', currentSessionState);
@@ -1952,7 +2056,7 @@
                 
                 handleSessionStateChange(currentSessionState);
                 renderLeaderboardAndProgress();
-                showToast("遊戲與模擬庫已成功重置！", true);
+                showToast("已真正清空模擬資料，排行榜已歸零！", true);
                 return;
             }
 
@@ -1964,11 +2068,11 @@
                 const querySnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'participants'));
                 const batch = writeBatch(db);
                 querySnap.forEach((doc) => {
-                    batch.update(doc.ref, { answers: {} });
+                    batch.delete(doc.ref);
                 });
                 await batch.commit();
 
-                showToast("遊戲數據與自訂題庫已完全重設！", true);
+                showToast("已真正清空：參與者、分數、答案與題庫皆已重設！", true);
             } catch (err) {
                 console.error(err);
                 showToast("重置失敗");
